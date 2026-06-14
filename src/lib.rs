@@ -5,21 +5,22 @@
 //! scheduling loop, no threads, and no async runtime.
 //!
 //! ```
-//! use isochron::CronError;
+//! use isochron::CronSchedule;
+//! use time::macros::datetime;
 //!
-//! let err = CronError::EmptyExpression;
-//! assert_eq!(err.to_string(), "cron expression must not be empty");
+//! let schedule = CronSchedule::parse("0 0 * * *").expect("valid expression");
+//! let after = datetime!(2026-01-01 12:00:00 UTC);
+//! assert_eq!(schedule.to_string(), "0 0 * * *");
 //! ```
 
+mod describe;
 mod error;
+mod expression;
 pub(crate) mod field;
-
-pub use error::CronError;
-
-// added in a later task
-// mod describe;
-// mod expression;
+// populated in a later task
 // mod iter;
 // mod occurrence;
-// pub use expression::CronSchedule;
+
+pub use error::CronError;
+pub use expression::CronSchedule;
 // pub use iter::Upcoming;

@@ -1,9 +1,6 @@
 //! A field schedule: the set of matching values for one cron field, stored as a
 //! bitset over the field's inclusive range.
 
-// Items are used by expression, occurrence, iter, describe (added in later tasks).
-#![allow(dead_code)]
-
 use crate::error::CronError;
 
 /// The set of matching values for one cron field.
@@ -75,6 +72,8 @@ impl FieldSchedule {
     }
 
     /// The matching values in ascending order.
+    // Used by describe (Task 7) and occurrence tests.
+    #[allow(dead_code)]
     pub(crate) fn values(self) -> Vec<u8> {
         (self.min..=self.max)
             .filter(|v| self.contains(*v))
@@ -82,6 +81,8 @@ impl FieldSchedule {
     }
 
     /// Whether every value in the field range is present.
+    // Used by describe (Task 7).
+    #[allow(dead_code)]
     pub(crate) fn is_full(self) -> bool {
         (self.min..=self.max).all(|v| self.contains(v))
     }
