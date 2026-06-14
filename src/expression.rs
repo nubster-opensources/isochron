@@ -86,7 +86,7 @@ impl CronSchedule {
     }
 
     /// Whether the given instant matches the schedule. UTC is enforced.
-    // Used by occurrence (Task 4) and tests.
+    // Used in expression tests and future tasks; occurrence uses day_matches directly.
     #[allow(dead_code)]
     pub(crate) fn matches(&self, datetime: OffsetDateTime) -> bool {
         let datetime = datetime.to_offset(UtcOffset::UTC);
@@ -98,8 +98,6 @@ impl CronSchedule {
     }
 
     /// The day-of-month / day-of-week union rule.
-    // Used by occurrence (Task 4).
-    #[allow(dead_code)]
     pub(crate) fn day_matches(&self, datetime: OffsetDateTime) -> bool {
         let dom = self.day_of_month.contains(datetime.day());
         let dow = self

@@ -17,9 +17,9 @@ mod describe;
 mod error;
 mod expression;
 pub(crate) mod field;
+mod occurrence;
 // populated in a later task
 // mod iter;
-// mod occurrence;
 
 pub use error::CronError;
 pub use expression::CronSchedule;
