@@ -102,7 +102,6 @@ impl CronSchedule {
     }
 
     /// Whether the given instant matches the schedule. UTC is enforced.
-    // Used in expression tests and future tasks; occurrence uses day_matches directly.
     #[allow(dead_code)]
     pub(crate) fn matches(&self, datetime: OffsetDateTime) -> bool {
         let datetime = datetime.to_offset(UtcOffset::UTC);
