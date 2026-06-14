@@ -12,13 +12,13 @@
 //! ```
 
 mod error;
+pub(crate) mod field;
 
 pub use error::CronError;
 
 // added in a later task
 // mod describe;
 // mod expression;
-// mod field;
 // mod iter;
 // mod occurrence;
 // pub use expression::CronSchedule;
