@@ -9,6 +9,11 @@ use crate::expression::CronSchedule;
 /// yields `None`.
 const SEARCH_YEARS: i32 = 5;
 
+/// The last minute-resolution instant of a day (used for backward search).
+const END_OF_DAY_MINUTE_RESOLUTION: Time = time::macros::time!(23:59:00);
+/// The last second-resolution instant of a day (used for backward search).
+const END_OF_DAY_SECOND_RESOLUTION: Time = time::macros::time!(23:59:59);
+
 impl CronSchedule {
     /// The first occurrence strictly after `after`, or `None` if none exists
     /// within the search horizon.
@@ -132,9 +137,9 @@ fn start_of_next_month(datetime: OffsetDateTime) -> Option<OffsetDateTime> {
 
 fn last_time(has_seconds: bool) -> Time {
     if has_seconds {
-        Time::from_hms(23, 59, 59).unwrap_or(Time::MIDNIGHT)
+        END_OF_DAY_SECOND_RESOLUTION
     } else {
-        Time::from_hms(23, 59, 0).unwrap_or(Time::MIDNIGHT)
+        END_OF_DAY_MINUTE_RESOLUTION
     }
 }
 
