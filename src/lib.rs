@@ -17,10 +17,9 @@ mod describe;
 mod error;
 mod expression;
 pub(crate) mod field;
+mod iter;
 mod occurrence;
-// populated in a later task
-// mod iter;
 
 pub use error::CronError;
 pub use expression::CronSchedule;
-// pub use iter::Upcoming;
+pub use iter::Upcoming;

@@ -3,7 +3,9 @@
 use core::fmt;
 use core::str::FromStr;
 
-use time::{OffsetDateTime, UtcOffset};
+use time::{Duration, OffsetDateTime, UtcOffset};
+
+use crate::iter::Upcoming;
 
 use crate::error::CronError;
 use crate::field::{self, FieldSchedule};
@@ -77,6 +79,20 @@ impl CronSchedule {
             dow_restricted: weekday_token != "*",
             normalized,
         })
+    }
+
+    /// A lazy iterator of occurrences strictly after `from`.
+    #[must_use]
+    pub fn upcoming(&self, from: OffsetDateTime) -> Upcoming<'_> {
+        Upcoming::new(self, from)
+    }
+
+    /// The duration from `from` until the next occurrence, or `None` if no
+    /// occurrence exists within the search horizon.
+    #[must_use]
+    pub fn time_until_next(&self, from: OffsetDateTime) -> Option<Duration> {
+        let next = self.next_after(from)?;
+        Some(next - from.to_offset(UtcOffset::UTC))
     }
 
     /// An English human-readable description of the schedule.
