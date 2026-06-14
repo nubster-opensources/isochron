@@ -10,7 +10,8 @@
 //!
 //! let schedule = CronSchedule::parse("0 0 * * *").expect("valid expression");
 //! let after = datetime!(2026-01-01 12:00:00 UTC);
-//! assert_eq!(schedule.to_string(), "0 0 * * *");
+//! let next = schedule.next_after(after).expect("an occurrence exists");
+//! assert_eq!(next, datetime!(2026-01-02 00:00:00 UTC));
 //! ```
 
 mod describe;

@@ -27,6 +27,9 @@ const MONTHS: [&str; 12] = [
 ];
 
 /// Render an English description of `schedule`.
+///
+/// For complex six-field expressions the rendering summarises the fields
+/// rather than producing an exhaustive enumeration.
 pub(crate) fn describe(schedule: &CronSchedule) -> String {
     let time_clause = time_clause(schedule);
     let day_clause = day_clause(schedule);
@@ -40,6 +43,31 @@ fn time_clause(schedule: &CronSchedule) -> String {
     let minute_full = schedule.minute.is_full();
     let hour_full = schedule.hour.is_full();
 
+    // When seconds are present and not pinned to exactly {0}, apply
+    // the six-field rendering branches.
+    let mention_seconds = schedule.has_seconds && {
+        let secs = schedule.second.values();
+        !(secs.len() == 1 && secs[0] == 0)
+    };
+
+    if mention_seconds {
+        let seconds = schedule.second.values();
+        if seconds.len() == 1 && minutes.len() == 1 && hours.len() == 1 {
+            // Exact time with seconds component.
+            return format!("at {:02}:{:02}:{:02}", hours[0], minutes[0], seconds[0]);
+        }
+        if minute_full && hour_full {
+            return format!("at second {} of every minute", join_numbers(&seconds));
+        }
+        return format!(
+            "at second {} past minute {} past hour {}",
+            join_numbers(&seconds),
+            join_numbers(&minutes),
+            join_numbers(&hours)
+        );
+    }
+
+    // Standard five-field (or six-field with seconds == {0}) rendering.
     if minute_full && hour_full {
         "every minute".to_owned()
     } else if minutes.len() == 1 && hours.len() == 1 {
@@ -162,5 +190,26 @@ mod tests {
     #[test]
     fn every_minute() {
         assert_eq!(describe("* * * * *"), "every minute every day");
+    }
+
+    #[test]
+    fn six_field_zero_second_unchanged() {
+        // seconds == {0}: must NOT mention seconds, identical to five-field.
+        assert_eq!(describe("0 0 0 * * *"), "at 00:00 every day");
+    }
+
+    #[test]
+    fn six_field_single_second() {
+        // Exact time with seconds component.
+        assert_eq!(describe("30 0 0 * * *"), "at 00:00:30 every day");
+    }
+
+    #[test]
+    fn six_field_step_seconds() {
+        // seconds set, minute and hour full.
+        assert_eq!(
+            describe("*/30 * * * * *"),
+            "at second 0 and 30 of every minute every day"
+        );
     }
 }

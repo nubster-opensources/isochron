@@ -101,17 +101,6 @@ impl CronSchedule {
         crate::describe::describe(self)
     }
 
-    /// Whether the given instant matches the schedule. UTC is enforced.
-    #[allow(dead_code)]
-    pub(crate) fn matches(&self, datetime: OffsetDateTime) -> bool {
-        let datetime = datetime.to_offset(UtcOffset::UTC);
-        self.second.contains(datetime.second())
-            && self.minute.contains(datetime.minute())
-            && self.hour.contains(datetime.hour())
-            && self.month.contains(u8::from(datetime.month()))
-            && self.day_matches(datetime)
-    }
-
     /// The day-of-month / day-of-week union rule.
     pub(crate) fn day_matches(&self, datetime: OffsetDateTime) -> bool {
         let dom = self.day_of_month.contains(datetime.day());
@@ -149,6 +138,19 @@ impl FromStr for CronSchedule {
 impl fmt::Display for CronSchedule {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.normalized)
+    }
+}
+
+#[cfg(test)]
+impl CronSchedule {
+    /// Whether the given instant matches the schedule. UTC is enforced.
+    pub(crate) fn matches(&self, datetime: time::OffsetDateTime) -> bool {
+        let datetime = datetime.to_offset(time::UtcOffset::UTC);
+        self.second.contains(datetime.second())
+            && self.minute.contains(datetime.minute())
+            && self.hour.contains(datetime.hour())
+            && self.month.contains(u8::from(datetime.month()))
+            && self.day_matches(datetime)
     }
 }
 

@@ -158,12 +158,11 @@ fn prev_second(datetime: OffsetDateTime) -> Option<OffsetDateTime> {
 }
 
 fn prev_minute(datetime: OffsetDateTime, has_seconds: bool) -> Option<OffsetDateTime> {
-    let truncated = truncate_to_minute(datetime)?;
-    let previous = truncated.checked_sub(Duration::seconds(1))?;
+    let at_minute = truncate_to_minute(datetime)?.checked_sub(Duration::minutes(1))?;
     if has_seconds {
-        Some(previous)
+        at_minute.replace_second(59).ok()
     } else {
-        previous.replace_second(0).ok()
+        Some(at_minute)
     }
 }
 
