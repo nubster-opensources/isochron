@@ -101,6 +101,31 @@ impl CronSchedule {
         crate::describe::describe(self)
     }
 
+    /// Returns true if `datetime` is an occurrence of this schedule, evaluated in UTC.
+    ///
+    /// The offset of `datetime` is normalised to UTC before matching, so any
+    /// `OffsetDateTime` is accepted regardless of its original offset.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use isochron::CronSchedule;
+    /// use time::macros::datetime;
+    ///
+    /// let schedule = CronSchedule::parse("0 0 * * *").expect("valid");
+    /// assert!(schedule.is_match(datetime!(2026-06-15 00:00:00 UTC)));
+    /// assert!(!schedule.is_match(datetime!(2026-06-15 12:00:00 UTC)));
+    /// ```
+    #[must_use]
+    pub fn is_match(&self, datetime: OffsetDateTime) -> bool {
+        let datetime = datetime.to_offset(UtcOffset::UTC);
+        self.second.contains(datetime.second())
+            && self.minute.contains(datetime.minute())
+            && self.hour.contains(datetime.hour())
+            && self.month.contains(u8::from(datetime.month()))
+            && self.day_matches(datetime)
+    }
+
     /// The day-of-month / day-of-week union rule.
     pub(crate) fn day_matches(&self, datetime: OffsetDateTime) -> bool {
         let dom = self.day_of_month.contains(datetime.day());
@@ -138,19 +163,6 @@ impl FromStr for CronSchedule {
 impl fmt::Display for CronSchedule {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.normalized)
-    }
-}
-
-#[cfg(test)]
-impl CronSchedule {
-    /// Whether the given instant matches the schedule. UTC is enforced.
-    pub(crate) fn matches(&self, datetime: time::OffsetDateTime) -> bool {
-        let datetime = datetime.to_offset(time::UtcOffset::UTC);
-        self.second.contains(datetime.second())
-            && self.minute.contains(datetime.minute())
-            && self.hour.contains(datetime.hour())
-            && self.month.contains(u8::from(datetime.month()))
-            && self.day_matches(datetime)
     }
 }
 
@@ -209,16 +221,16 @@ mod tests {
         // Day-of-month 1 OR Monday: 2026-06-01 is a Monday, 2026-06-15 is a
         // Monday, 2026-07-01 is a Wednesday (matches by day-of-month).
         let schedule = CronSchedule::parse("0 0 1 * 1").expect("valid");
-        assert!(schedule.matches(datetime!(2026-06-15 00:00:00 UTC))); // Monday
-        assert!(schedule.matches(datetime!(2026-07-01 00:00:00 UTC))); // day 1
-        assert!(!schedule.matches(datetime!(2026-06-16 00:00:00 UTC))); // neither
+        assert!(schedule.is_match(datetime!(2026-06-15 00:00:00 UTC))); // Monday
+        assert!(schedule.is_match(datetime!(2026-07-01 00:00:00 UTC))); // day 1
+        assert!(!schedule.is_match(datetime!(2026-06-16 00:00:00 UTC))); // neither
     }
 
     #[test]
     fn matches_with_single_day_constraint() {
         let schedule = CronSchedule::parse("0 0 15 * *").expect("valid");
-        assert!(schedule.matches(datetime!(2026-06-15 00:00:00 UTC)));
-        assert!(!schedule.matches(datetime!(2026-06-16 00:00:00 UTC)));
+        assert!(schedule.is_match(datetime!(2026-06-15 00:00:00 UTC)));
+        assert!(!schedule.is_match(datetime!(2026-06-16 00:00:00 UTC)));
     }
 
     #[test]
