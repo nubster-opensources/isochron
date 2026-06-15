@@ -44,8 +44,9 @@ The script:
 2. Pulls `origin/main`.
 3. Computes the target version from the bump level.
 4. Creates `release/v<TARGET>-prep` branch.
-5. Graduates `CHANGELOG.md`: moves `[Unreleased]` body under a new
-   `[<TARGET>] - <DATE>` section, refreshes the link refs.
+5. Graduates `CHANGELOG.md`: renames the current `## x.y.z (unreleased)`
+   heading to a dated `## x.y.z (YYYY-MM-DD)` heading, and prepends a fresh
+   `## x.y.z (unreleased)` section for the next development cycle.
 6. Runs `cargo release <LEVEL> --execute --no-confirm` which bumps the
    `Cargo.toml` version field in a single consolidated commit.
 7. Runs `cargo fmt --check`, `clippy` strict, full test suite.
@@ -62,11 +63,11 @@ git tag -a v<TARGET> -m "v<TARGET>"
 git push origin v<TARGET>
 ```
 
-The tag push triggers `.github/workflows/release.yml` which:
+The tag push triggers `.github/workflows/release.yml`, which:
 
 1. Publishes `isochron` to crates.io.
-2. Creates a release whose notes are extracted from the `[<TARGET>]` section
-   of `CHANGELOG.md`.
+2. Creates a release whose notes are extracted from the `## <TARGET> (<DATE>)`
+   section of `CHANGELOG.md`.
 
 Tagging is deliberately a manual step so the human reviewing the PR is also
 the one who triggers the publish, with full awareness of what is about to
@@ -89,6 +90,6 @@ leave the workshop.
   then retry the bump.
 - **`gh pr create` fails**: verify authentication status. In CI the
   `GITHUB_TOKEN` is provided automatically.
-- **CHANGELOG section not found**: the Python script expects `## [Unreleased]`
-  followed by `## [` somewhere later. If you renamed `[Unreleased]` or removed
-  the next section, the script aborts.
+- **CHANGELOG section not found**: the Python script expects a heading matching
+  `## x.y.z (unreleased)`. If that heading is absent or has been renamed, the
+  script emits a warning and leaves CHANGELOG.md unchanged.

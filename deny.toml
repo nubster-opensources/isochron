@@ -1,5 +1,7 @@
 [advisories]
+version = 2
 yanked = "deny"
+unmaintained = "workspace"
 
 [licenses]
 allow = ["MIT", "Apache-2.0", "Unicode-3.0"]
@@ -7,6 +9,7 @@ confidence-threshold = 0.9
 
 [bans]
 multiple-versions = "warn"
+deny = [{ name = "chrono" }]
 
 [sources]
 unknown-registry = "deny"

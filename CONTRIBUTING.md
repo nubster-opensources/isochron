@@ -20,9 +20,8 @@ In short:
   pinned in `rust-toolchain.toml` and `Cargo.toml`.
 - **No competitor mentions**: the source code, commit messages, pull requests
   and documentation never name competing tools or services.
-- **English on the public API, French on internal artifacts**: rustdoc comments
-  and public types are written in English; commit messages, issues and project
-  documentation are written in French.
+- **English everywhere**: rustdoc comments, public types, commit messages,
+  issues, pull requests and project documentation are all written in English.
 
 ## Local setup
 

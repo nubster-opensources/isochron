@@ -24,3 +24,4 @@ mod occurrence;
 pub use error::CronError;
 pub use expression::CronSchedule;
 pub use iter::Upcoming;
+pub use occurrence::SEARCH_HORIZON_YEARS;

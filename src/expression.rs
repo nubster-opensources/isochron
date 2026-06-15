@@ -14,7 +14,7 @@ use crate::field::{self, FieldSchedule};
 ///
 /// Build one with [`CronSchedule::parse`]. Compute occurrences with
 /// [`CronSchedule::next_after`] and [`CronSchedule::prev_before`].
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct CronSchedule {
     pub(crate) second: FieldSchedule,
     pub(crate) minute: FieldSchedule,
@@ -32,8 +32,25 @@ impl CronSchedule {
     /// Parse and fully validate a cron expression.
     ///
     /// Accepts five fields (`minute hour day-of-month month day-of-week`) or six
-    /// when a leading seconds field is present, plus the macros `@yearly`,
-    /// `@annually`, `@monthly`, `@weekly`, `@daily`, `@midnight`, and `@hourly`.
+    /// when a leading seconds field is present (`second minute hour day-of-month
+    /// month day-of-week`), plus the macros `@yearly`, `@annually`, `@monthly`,
+    /// `@weekly`, `@daily`, `@midnight`, and `@hourly`. The five-field form
+    /// implicitly sets seconds to 0.
+    ///
+    /// # Semantics
+    ///
+    /// **Ranges.** Ranges must be non-wrapping (start <= end). An inverted range
+    /// such as `22-2` for hours is a parse error; use a comma list `22-23,0-2`
+    /// instead.
+    ///
+    /// **Sunday in day-of-week.** Both `0` and `7` denote Sunday. `7` is valid
+    /// in ranges: `5-7` matches Friday, Saturday, and Sunday.
+    ///
+    /// **Day union (Vixie semantics).** When BOTH the day-of-month and
+    /// day-of-week fields are restricted (i.e. not a bare `*`), a day matches if
+    /// EITHER field matches (OR logic). Only the literal `*` disables a field's
+    /// restriction; a range such as `1-31` still counts as restricted. This
+    /// differs from Quartz, which uses AND logic with an explicit `?` placeholder.
     ///
     /// # Errors
     ///
@@ -82,6 +99,18 @@ impl CronSchedule {
     }
 
     /// A lazy iterator of occurrences strictly after `from`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use isochron::CronSchedule;
+    /// use time::macros::datetime;
+    ///
+    /// let schedule = CronSchedule::parse("0 9 * * *").expect("valid");
+    /// let mut iter = schedule.upcoming(datetime!(2026-01-01 00:00:00 UTC));
+    /// assert_eq!(iter.next(), Some(datetime!(2026-01-01 09:00:00 UTC)));
+    /// assert_eq!(iter.next(), Some(datetime!(2026-01-02 09:00:00 UTC)));
+    /// ```
     #[must_use]
     pub fn upcoming(&self, from: OffsetDateTime) -> Upcoming<'_> {
         Upcoming::new(self, from)
@@ -89,6 +118,20 @@ impl CronSchedule {
 
     /// The duration from `from` until the next occurrence, or `None` if no
     /// occurrence exists within the search horizon.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use isochron::CronSchedule;
+    /// use time::{Duration, macros::datetime};
+    ///
+    /// let schedule = CronSchedule::parse("0 * * * *").expect("valid");
+    /// // From midnight the next hourly tick is at 01:00, one hour away.
+    /// let wait = schedule
+    ///     .time_until_next(datetime!(2026-01-01 00:00:00 UTC))
+    ///     .expect("exists");
+    /// assert_eq!(wait, Duration::hours(1));
+    /// ```
     #[must_use]
     pub fn time_until_next(&self, from: OffsetDateTime) -> Option<Duration> {
         let next = self.next_after(from)?;
@@ -99,6 +142,31 @@ impl CronSchedule {
     #[must_use]
     pub fn describe(&self) -> String {
         crate::describe::describe(self)
+    }
+
+    /// Returns true if `datetime` is an occurrence of this schedule, evaluated in UTC.
+    ///
+    /// The offset of `datetime` is normalised to UTC before matching, so any
+    /// `OffsetDateTime` is accepted regardless of its original offset.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use isochron::CronSchedule;
+    /// use time::macros::datetime;
+    ///
+    /// let schedule = CronSchedule::parse("0 0 * * *").expect("valid");
+    /// assert!(schedule.is_match(datetime!(2026-06-15 00:00:00 UTC)));
+    /// assert!(!schedule.is_match(datetime!(2026-06-15 12:00:00 UTC)));
+    /// ```
+    #[must_use]
+    pub fn is_match(&self, datetime: OffsetDateTime) -> bool {
+        let datetime = datetime.to_offset(UtcOffset::UTC);
+        self.second.contains(datetime.second())
+            && self.minute.contains(datetime.minute())
+            && self.hour.contains(datetime.hour())
+            && self.month.contains(u8::from(datetime.month()))
+            && self.day_matches(datetime)
     }
 
     /// The day-of-month / day-of-week union rule.
@@ -138,19 +206,6 @@ impl FromStr for CronSchedule {
 impl fmt::Display for CronSchedule {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.normalized)
-    }
-}
-
-#[cfg(test)]
-impl CronSchedule {
-    /// Whether the given instant matches the schedule. UTC is enforced.
-    pub(crate) fn matches(&self, datetime: time::OffsetDateTime) -> bool {
-        let datetime = datetime.to_offset(time::UtcOffset::UTC);
-        self.second.contains(datetime.second())
-            && self.minute.contains(datetime.minute())
-            && self.hour.contains(datetime.hour())
-            && self.month.contains(u8::from(datetime.month()))
-            && self.day_matches(datetime)
     }
 }
 
@@ -209,16 +264,16 @@ mod tests {
         // Day-of-month 1 OR Monday: 2026-06-01 is a Monday, 2026-06-15 is a
         // Monday, 2026-07-01 is a Wednesday (matches by day-of-month).
         let schedule = CronSchedule::parse("0 0 1 * 1").expect("valid");
-        assert!(schedule.matches(datetime!(2026-06-15 00:00:00 UTC))); // Monday
-        assert!(schedule.matches(datetime!(2026-07-01 00:00:00 UTC))); // day 1
-        assert!(!schedule.matches(datetime!(2026-06-16 00:00:00 UTC))); // neither
+        assert!(schedule.is_match(datetime!(2026-06-15 00:00:00 UTC))); // Monday
+        assert!(schedule.is_match(datetime!(2026-07-01 00:00:00 UTC))); // day 1
+        assert!(!schedule.is_match(datetime!(2026-06-16 00:00:00 UTC))); // neither
     }
 
     #[test]
     fn matches_with_single_day_constraint() {
         let schedule = CronSchedule::parse("0 0 15 * *").expect("valid");
-        assert!(schedule.matches(datetime!(2026-06-15 00:00:00 UTC)));
-        assert!(!schedule.matches(datetime!(2026-06-16 00:00:00 UTC)));
+        assert!(schedule.is_match(datetime!(2026-06-15 00:00:00 UTC)));
+        assert!(!schedule.is_match(datetime!(2026-06-16 00:00:00 UTC)));
     }
 
     #[test]
