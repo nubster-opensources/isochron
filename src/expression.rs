@@ -1,6 +1,7 @@
 //! A parsed cron schedule and its public parsing entry points.
 
 use core::fmt;
+use core::hash::{Hash, Hasher};
 use core::str::FromStr;
 
 use time::{Duration, OffsetDateTime, UtcOffset};
@@ -14,7 +15,7 @@ use crate::field::{self, FieldSchedule};
 ///
 /// Build one with [`CronSchedule::parse`]. Compute occurrences with
 /// [`CronSchedule::next_after`] and [`CronSchedule::prev_before`].
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone)]
 pub struct CronSchedule {
     pub(crate) second: FieldSchedule,
     pub(crate) minute: FieldSchedule,
@@ -26,6 +27,36 @@ pub struct CronSchedule {
     pub(crate) dom_restricted: bool,
     pub(crate) dow_restricted: bool,
     normalized: String,
+}
+
+impl PartialEq for CronSchedule {
+    fn eq(&self, other: &Self) -> bool {
+        self.second == other.second
+            && self.minute == other.minute
+            && self.hour == other.hour
+            && self.day_of_month == other.day_of_month
+            && self.month == other.month
+            && self.day_of_week == other.day_of_week
+            && self.has_seconds == other.has_seconds
+            && self.dom_restricted == other.dom_restricted
+            && self.dow_restricted == other.dow_restricted
+    }
+}
+
+impl Eq for CronSchedule {}
+
+impl Hash for CronSchedule {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.second.hash(state);
+        self.minute.hash(state);
+        self.hour.hash(state);
+        self.day_of_month.hash(state);
+        self.month.hash(state);
+        self.day_of_week.hash(state);
+        self.has_seconds.hash(state);
+        self.dom_restricted.hash(state);
+        self.dow_restricted.hash(state);
+    }
 }
 
 impl CronSchedule {
@@ -282,5 +313,42 @@ mod tests {
         let rendered = schedule.to_string();
         let reparsed = CronSchedule::parse(&rendered).expect("valid");
         assert_eq!(schedule, reparsed);
+    }
+
+    #[test]
+    fn eq_ignores_sunday_alias() {
+        let a = CronSchedule::parse("0 0 * * 0").expect("valid");
+        let b = CronSchedule::parse("0 0 * * 7").expect("valid");
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn eq_ignores_name_vs_number() {
+        let a = CronSchedule::parse("0 0 * * MON").expect("valid");
+        let b = CronSchedule::parse("0 0 * * 1").expect("valid");
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn eq_macro_matches_expanded() {
+        let a = CronSchedule::parse("@yearly").expect("valid");
+        let b = CronSchedule::parse("0 0 1 1 *").expect("valid");
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn hash_agrees_with_eq() {
+        use std::collections::HashSet;
+        let mut set = HashSet::new();
+        set.insert(CronSchedule::parse("0 0 * * 0").expect("valid"));
+        set.insert(CronSchedule::parse("0 0 * * 7").expect("valid"));
+        assert_eq!(set.len(), 1);
+    }
+
+    #[test]
+    fn eq_distinguishes_real_differences() {
+        let a = CronSchedule::parse("0 0 * * 1").expect("valid");
+        let b = CronSchedule::parse("0 0 * * 2").expect("valid");
+        assert_ne!(a, b);
     }
 }

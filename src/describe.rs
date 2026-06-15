@@ -53,18 +53,27 @@ fn time_clause(schedule: &CronSchedule) -> String {
     if mention_seconds {
         let seconds = schedule.second.values();
         if seconds.len() == 1 && minutes.len() == 1 && hours.len() == 1 {
-            // Exact time with seconds component.
             return format!("at {:02}:{:02}:{:02}", hours[0], minutes[0], seconds[0]);
         }
-        if minute_full && hour_full {
-            return format!("at second {} of every minute", join_numbers(&seconds));
+        if schedule.second.is_full() && minute_full && hour_full {
+            return "every second".to_owned();
         }
-        return format!(
-            "at second {} past minute {} past hour {}",
-            join_numbers(&seconds),
-            join_numbers(&minutes),
-            join_numbers(&hours)
-        );
+        let second_phrase = if schedule.second.is_full() {
+            "every second".to_owned()
+        } else {
+            format!("second {}", join_numbers(&seconds))
+        };
+        let minute_phrase = if minute_full {
+            "every minute".to_owned()
+        } else {
+            format!("minute {}", join_numbers(&minutes))
+        };
+        let hour_phrase = if hour_full {
+            "every hour".to_owned()
+        } else {
+            format!("hour {}", join_numbers(&hours))
+        };
+        return format!("at {second_phrase} of {minute_phrase} of {hour_phrase}");
     }
 
     // Standard five-field (or six-field with seconds == {0}) rendering.
@@ -209,7 +218,25 @@ mod tests {
         // seconds set, minute and hour full.
         assert_eq!(
             describe("*/30 * * * * *"),
-            "at second 0 and 30 of every minute every day"
+            "at second 0 and 30 of every minute of every hour every day"
         );
+    }
+
+    #[test]
+    fn describe_collapses_full_minute_in_six_field() {
+        assert_eq!(
+            describe("0/30 * 5 * * *"),
+            "at second 0 and 30 of every minute of hour 5 every day"
+        );
+    }
+
+    #[test]
+    fn describe_all_full_six_field() {
+        assert_eq!(describe("* * * * * *"), "every second every day");
+    }
+
+    #[test]
+    fn describe_no_doubled_past() {
+        assert!(!describe("0/30 30 9 * * *").contains("past"));
     }
 }
