@@ -22,9 +22,13 @@ declared in `Cargo.toml` via `rust-version = "1.88"`.
 
 ## How we verify the MSRV in CI
 
-The repository CI pins `rust-toolchain.toml` to `1.88.0`. The `Format`,
-`Clippy` and `Build and test` jobs all run on this exact toolchain, which
-guarantees that nothing newer slips in.
+The CI has two distinct toolchain tracks:
+
+- The `test` job (format, clippy, test suite, doc build) runs on the current
+  **stable** toolchain so that the crate always works on the latest stable
+  release.
+- The dedicated `msrv` job pins **1.88** and runs `cargo test --all-features`,
+  which guarantees that no feature requiring a newer compiler has crept in.
 
 ## Downstream impact
 

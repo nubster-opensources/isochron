@@ -31,7 +31,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.88
-      - run: cargo build --all-features
+      - run: cargo test --all-features
 
   deny:
     runs-on: ubuntu-latest
