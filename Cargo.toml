@@ -1,0 +1,36 @@
+[package]
+name = "isochron"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+license = "MIT OR Apache-2.0"
+description = "Cron occurrence engine: parse Vixie cron expressions and compute next and previous occurrences in UTC"
+readme = "README.md"
+repository = "https://github.com/nubster-opensources/isochron"
+homepage = "https://github.com/nubster-opensources/isochron"
+authors = ["Nubster"]
+keywords = ["cron", "schedule", "time", "recurrence"]
+categories = ["date-and-time"]
+
+[dependencies]
+time = { version = "0.3", features = ["macros"] }
+thiserror = "2"
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "deny"
+unreachable_pub = "warn"
+rust_2024_compatibility = { level = "warn", priority = -1 }
+
+[lints.clippy]
+all = { level = "deny", priority = -1 }
+pedantic = { level = "deny", priority = -1 }
+module_name_repetitions = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+similar_names = "allow"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "symbols"

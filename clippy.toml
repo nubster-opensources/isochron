@@ -1,0 +1,10 @@
+msrv = "1.88"
+
+doc-valid-idents = [
+  "..",
+  "isochron",
+  "Nubster",
+  "Vixie",
+  "UTC",
+  "CRON",
+]
