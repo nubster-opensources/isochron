@@ -18,6 +18,19 @@ const END_OF_DAY_SECOND_RESOLUTION: Time = time::macros::time!(23:59:59);
 impl CronSchedule {
     /// The first occurrence strictly after `after`, or `None` if no occurrence
     /// exists within the [`SEARCH_HORIZON_YEARS`] (5) year search horizon.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use isochron::CronSchedule;
+    /// use time::macros::datetime;
+    ///
+    /// let schedule = CronSchedule::parse("0 0 * * *").expect("valid");
+    /// let next = schedule
+    ///     .next_after(datetime!(2026-01-01 00:00:00 UTC))
+    ///     .expect("exists");
+    /// assert_eq!(next, datetime!(2026-01-02 00:00:00 UTC));
+    /// ```
     #[must_use]
     pub fn next_after(&self, after: OffsetDateTime) -> Option<OffsetDateTime> {
         let after = after.to_offset(UtcOffset::UTC);
@@ -57,6 +70,19 @@ impl CronSchedule {
 
     /// The last occurrence strictly before `before`, or `None` if no occurrence
     /// exists within the [`SEARCH_HORIZON_YEARS`] (5) year search horizon.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use isochron::CronSchedule;
+    /// use time::macros::datetime;
+    ///
+    /// let schedule = CronSchedule::parse("0 0 * * *").expect("valid");
+    /// let prev = schedule
+    ///     .prev_before(datetime!(2026-01-02 00:00:00 UTC))
+    ///     .expect("exists");
+    /// assert_eq!(prev, datetime!(2026-01-01 00:00:00 UTC));
+    /// ```
     #[must_use]
     pub fn prev_before(&self, before: OffsetDateTime) -> Option<OffsetDateTime> {
         let before = before.to_offset(UtcOffset::UTC);

@@ -14,6 +14,13 @@ isochron is sponsored by [Nubster](https://nubster.com).
 
 ## Example
 
+Add to your `Cargo.toml`:
+
+```toml
+isochron = "0.1"
+time = "0.3"   # OffsetDateTime appears in the public API
+```
+
 ```rust
 use isochron::CronSchedule;
 use time::macros::datetime;
@@ -21,7 +28,8 @@ use time::macros::datetime;
 let schedule = CronSchedule::parse("0 9 * * MON-FRI").unwrap();
 let after = datetime!(2026-01-01 12:00:00 UTC);
 let next = schedule.next_after(after).unwrap();
-println!("{}", schedule.describe());
+println!("next: {}", next);          // next: 2026-01-02 09:00:00.0 +00:00:00
+println!("{}", schedule.describe()); // "At 09:00, Monday through Friday"
 ```
 
 ## Supported syntax

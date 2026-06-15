@@ -99,6 +99,18 @@ impl CronSchedule {
     }
 
     /// A lazy iterator of occurrences strictly after `from`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use isochron::CronSchedule;
+    /// use time::macros::datetime;
+    ///
+    /// let schedule = CronSchedule::parse("0 9 * * *").expect("valid");
+    /// let mut iter = schedule.upcoming(datetime!(2026-01-01 00:00:00 UTC));
+    /// assert_eq!(iter.next(), Some(datetime!(2026-01-01 09:00:00 UTC)));
+    /// assert_eq!(iter.next(), Some(datetime!(2026-01-02 09:00:00 UTC)));
+    /// ```
     #[must_use]
     pub fn upcoming(&self, from: OffsetDateTime) -> Upcoming<'_> {
         Upcoming::new(self, from)
@@ -106,6 +118,20 @@ impl CronSchedule {
 
     /// The duration from `from` until the next occurrence, or `None` if no
     /// occurrence exists within the search horizon.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use isochron::CronSchedule;
+    /// use time::{Duration, macros::datetime};
+    ///
+    /// let schedule = CronSchedule::parse("0 * * * *").expect("valid");
+    /// // From midnight the next hourly tick is at 01:00, one hour away.
+    /// let wait = schedule
+    ///     .time_until_next(datetime!(2026-01-01 00:00:00 UTC))
+    ///     .expect("exists");
+    /// assert_eq!(wait, Duration::hours(1));
+    /// ```
     #[must_use]
     pub fn time_until_next(&self, from: OffsetDateTime) -> Option<Duration> {
         let next = self.next_after(from)?;
