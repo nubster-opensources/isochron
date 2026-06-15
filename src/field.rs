@@ -127,6 +127,11 @@ fn parse_part(part: &str, kind: FieldKind) -> Result<u64, CronError> {
         None => (part, None),
     };
 
+    // For day-of-week we allow raw value 7 (Sunday alias) through range
+    // resolution so that ranges like "5-7" and "0-7" work correctly.  The
+    // remapping 7->0 happens below when we set bits, not here.
+    let is_dow = kind.name == DAY_OF_WEEK.name;
+
     let (start, end) = if range_token == "*" {
         (kind.min, kind.max)
     } else if let Some((low, high)) = range_token.split_once('-') {
@@ -143,6 +148,8 @@ fn parse_part(part: &str, kind: FieldKind) -> Result<u64, CronError> {
         }
     };
 
+    // For day-of-week, "5-7" has raw start=5, raw end=7 which is valid (5<=7).
+    // For other fields, start > end is always an error.
     if start > end {
         return Err(invalid(kind, part, "range start is after range end"));
     }
@@ -151,7 +158,14 @@ fn parse_part(part: &str, kind: FieldKind) -> Result<u64, CronError> {
     let mut mask = 0u64;
     let mut value = start;
     while value <= end {
-        mask |= 1u64 << value;
+        // For day-of-week, 7 is an alias for Sunday (bit 0).  Apply % 7 only
+        // for this field so other fields are never affected.
+        let bit = if is_dow {
+            u32::from(value) % 7
+        } else {
+            u32::from(value)
+        };
+        mask |= 1u64 << bit;
         value = value.saturating_add(step);
     }
     Ok(mask)
@@ -167,14 +181,16 @@ fn resolve_value(raw: &str, kind: FieldKind, part: &str) -> Result<u8, CronError
         parse_numeric(raw, kind, part)?
     };
 
-    // Day-of-week accepts 7 as an alias for Sunday (0).
-    let value = if kind.name == DAY_OF_WEEK.name && value == 7 {
-        0
+    // Day-of-week: 7 is a valid Sunday alias; range check uses max=7 so that
+    // "5-7", "0-7", and single "7" all parse.  Bit remapping (7->0) happens in
+    // parse_part when the bitset is built, preserving correct range ordering.
+    let effective_max = if kind.name == DAY_OF_WEEK.name {
+        7
     } else {
-        value
+        kind.max
     };
 
-    if value < kind.min || value > kind.max {
+    if value < kind.min || value > effective_max {
         return Err(CronError::ValueOutOfRange {
             field: kind.name,
             value: u32::from(value),
@@ -211,6 +227,21 @@ fn parse_numeric(raw: &str, kind: FieldKind, part: &str) -> Result<u8, CronError
 mod tests {
     use super::{DAY_OF_WEEK, FieldSchedule, HOUR, MINUTE, MONTH};
     use crate::error::CronError;
+
+    // Issue #3: Vixie-semantics for day-of-week ranges containing 7
+    #[test]
+    fn weekday_range_five_to_seven_is_fri_sat_sun() {
+        // "5-7" = Fri(5), Sat(6), Sun(0) - sorted ascending: [0, 5, 6]
+        let field = FieldSchedule::parse("5-7", DAY_OF_WEEK).expect("valid");
+        assert_eq!(field.values(), vec![0, 5, 6]);
+    }
+
+    #[test]
+    fn weekday_range_zero_to_seven_is_all_days() {
+        // "0-7" = all seven days
+        let field = FieldSchedule::parse("0-7", DAY_OF_WEEK).expect("valid");
+        assert_eq!(field.values(), vec![0, 1, 2, 3, 4, 5, 6]);
+    }
 
     #[test]
     fn wildcard_fills_the_whole_range() {
