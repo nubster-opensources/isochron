@@ -34,8 +34,14 @@ impl Iterator for Upcoming<'_> {
     }
 }
 
+/// Once `Upcoming` returns `None` it will continue to return `None` because
+/// the search horizon is fixed and the cursor only advances forward.
+impl core::iter::FusedIterator for Upcoming<'_> {}
+
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+
     use crate::expression::CronSchedule;
     use time::macros::datetime;
 
@@ -63,5 +69,27 @@ mod tests {
             .time_until_next(datetime!(2026-01-01 23:00:00 UTC))
             .expect("exists");
         assert_eq!(gap, time::Duration::hours(1));
+    }
+
+    #[test]
+    fn cron_schedule_is_hashable() {
+        let mut set = HashSet::new();
+        let daily = CronSchedule::parse("0 0 * * *").expect("valid");
+        let hourly = CronSchedule::parse("0 * * * *").expect("valid");
+        set.insert(daily.clone());
+        set.insert(hourly);
+        set.insert(daily.clone()); // duplicate - set must not grow
+        assert_eq!(set.len(), 2);
+        assert!(set.contains(&daily));
+    }
+
+    #[test]
+    fn upcoming_exhausts_then_stays_done() {
+        // An impossible expression returns None immediately; a FusedIterator
+        // must keep returning None on subsequent calls.
+        let schedule = CronSchedule::parse("0 0 30 2 *").expect("valid");
+        let mut iter = schedule.upcoming(datetime!(2030-01-01 00:00:00 UTC));
+        assert!(iter.next().is_none());
+        assert!(iter.next().is_none()); // fused: stays None
     }
 }

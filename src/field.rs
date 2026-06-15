@@ -4,7 +4,7 @@
 use crate::error::CronError;
 
 /// The set of matching values for one cron field.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct FieldSchedule {
     mask: u64,
     min: u8,

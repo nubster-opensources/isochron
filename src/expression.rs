@@ -14,7 +14,7 @@ use crate::field::{self, FieldSchedule};
 ///
 /// Build one with [`CronSchedule::parse`]. Compute occurrences with
 /// [`CronSchedule::next_after`] and [`CronSchedule::prev_before`].
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct CronSchedule {
     pub(crate) second: FieldSchedule,
     pub(crate) minute: FieldSchedule,
