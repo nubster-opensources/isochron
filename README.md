@@ -35,6 +35,25 @@ day-of-month / day-of-week union follows Vixie semantics.
 Not supported: Quartz extensions (`L`, `W`, `#`, `?`), `@reboot`, a year field,
 and per-expression timezones (evaluation is UTC).
 
+### Semantics
+
+**Field order.** The six-field form puts seconds first:
+`second minute hour day-of-month month day-of-week`. The five-field form omits
+the leading seconds field (implicitly second 0).
+
+**Ranges.** Ranges must be non-wrapping: the start must be less than or equal to
+the end. An inverted range such as `22-2` for hours is rejected as a parse error.
+Use a comma list instead: `22-23,0-2`.
+
+**Sunday in day-of-week.** Both `0` and `7` denote Sunday. `7` is accepted in
+ranges: `5-7` means Friday, Saturday, Sunday.
+
+**Day-of-month / day-of-week union (Vixie semantics).** When BOTH fields are
+restricted (not a bare `*`), a day matches if EITHER the day-of-month OR the
+day-of-week matches. Only the literal `*` disables a field's restriction: a range
+like `1-31` still counts as restricted. This differs from Quartz which requires a
+`?` placeholder and uses AND logic.
+
 ## Contributing
 
 Contributions are welcome. Please read [`CONTRIBUTING.md`](./CONTRIBUTING.md)

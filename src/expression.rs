@@ -32,8 +32,25 @@ impl CronSchedule {
     /// Parse and fully validate a cron expression.
     ///
     /// Accepts five fields (`minute hour day-of-month month day-of-week`) or six
-    /// when a leading seconds field is present, plus the macros `@yearly`,
-    /// `@annually`, `@monthly`, `@weekly`, `@daily`, `@midnight`, and `@hourly`.
+    /// when a leading seconds field is present (`second minute hour day-of-month
+    /// month day-of-week`), plus the macros `@yearly`, `@annually`, `@monthly`,
+    /// `@weekly`, `@daily`, `@midnight`, and `@hourly`. The five-field form
+    /// implicitly sets seconds to 0.
+    ///
+    /// # Semantics
+    ///
+    /// **Ranges.** Ranges must be non-wrapping (start <= end). An inverted range
+    /// such as `22-2` for hours is a parse error; use a comma list `22-23,0-2`
+    /// instead.
+    ///
+    /// **Sunday in day-of-week.** Both `0` and `7` denote Sunday. `7` is valid
+    /// in ranges: `5-7` matches Friday, Saturday, and Sunday.
+    ///
+    /// **Day union (Vixie semantics).** When BOTH the day-of-month and
+    /// day-of-week fields are restricted (i.e. not a bare `*`), a day matches if
+    /// EITHER field matches (OR logic). Only the literal `*` disables a field's
+    /// restriction; a range such as `1-31` still counts as restricted. This
+    /// differs from Quartz, which uses AND logic with an explicit `?` placeholder.
     ///
     /// # Errors
     ///
