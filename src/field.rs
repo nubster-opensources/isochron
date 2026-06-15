@@ -203,7 +203,7 @@ fn resolve_value(raw: &str, kind: FieldKind, part: &str) -> Result<u8, CronError
 
 fn parse_numeric(raw: &str, kind: FieldKind, part: &str) -> Result<u8, CronError> {
     // Parse as u32 first so out-of-range values produce ValueOutOfRange rather
-    // than a generic parse error, and clamp 7 (day-of-week Sunday alias).
+    // than a generic parse error.
     let parsed = raw
         .parse::<u32>()
         .map_err(|_| invalid(kind, part, "not a number"))?;
@@ -220,7 +220,14 @@ fn parse_numeric(raw: &str, kind: FieldKind, part: &str) -> Result<u8, CronError
             max: kind.max,
         });
     }
-    Ok(u8::try_from(parsed).unwrap_or(kind.max))
+    // The ceiling check above guarantees parsed fits in u8; make that
+    // invariant explicit rather than silently masking a conversion failure.
+    u8::try_from(parsed).map_err(|_| CronError::ValueOutOfRange {
+        field: kind.name,
+        value: parsed,
+        min: kind.min,
+        max: kind.max,
+    })
 }
 
 #[cfg(test)]
