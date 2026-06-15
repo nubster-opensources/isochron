@@ -4,10 +4,11 @@ use time::{Date, Duration, Month, OffsetDateTime, Time, UtcOffset};
 
 use crate::expression::CronSchedule;
 
-/// How many years forward or backward the search scans before giving up. An
-/// expression that never matches within this horizon (for example 30 February)
-/// yields `None`.
-const SEARCH_YEARS: i32 = 5;
+/// How many years forward or backward the occurrence search scans before
+/// giving up. An expression that never matches within this horizon (for
+/// example 30 February) causes [`CronSchedule::next_after`] and
+/// [`CronSchedule::prev_before`] to return `None`.
+pub const SEARCH_HORIZON_YEARS: i32 = 5;
 
 /// The last minute-resolution instant of a day (used for backward search).
 const END_OF_DAY_MINUTE_RESOLUTION: Time = time::macros::time!(23:59:00);
@@ -15,12 +16,12 @@ const END_OF_DAY_MINUTE_RESOLUTION: Time = time::macros::time!(23:59:00);
 const END_OF_DAY_SECOND_RESOLUTION: Time = time::macros::time!(23:59:59);
 
 impl CronSchedule {
-    /// The first occurrence strictly after `after`, or `None` if none exists
-    /// within the search horizon.
+    /// The first occurrence strictly after `after`, or `None` if no occurrence
+    /// exists within the [`SEARCH_HORIZON_YEARS`] (5) year search horizon.
     #[must_use]
     pub fn next_after(&self, after: OffsetDateTime) -> Option<OffsetDateTime> {
         let after = after.to_offset(UtcOffset::UTC);
-        let limit_year = after.year().checked_add(SEARCH_YEARS)?;
+        let limit_year = after.year().checked_add(SEARCH_HORIZON_YEARS)?;
         let mut candidate = if self.has_seconds {
             next_second(after)?
         } else {
@@ -54,12 +55,12 @@ impl CronSchedule {
         }
     }
 
-    /// The last occurrence strictly before `before`, or `None` if none exists
-    /// within the search horizon.
+    /// The last occurrence strictly before `before`, or `None` if no occurrence
+    /// exists within the [`SEARCH_HORIZON_YEARS`] (5) year search horizon.
     #[must_use]
     pub fn prev_before(&self, before: OffsetDateTime) -> Option<OffsetDateTime> {
         let before = before.to_offset(UtcOffset::UTC);
-        let limit_year = before.year().checked_sub(SEARCH_YEARS)?;
+        let limit_year = before.year().checked_sub(SEARCH_HORIZON_YEARS)?;
         let mut candidate = if self.has_seconds {
             prev_second_strictly_before(before)?
         } else {
