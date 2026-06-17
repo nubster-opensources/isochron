@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.1 (unreleased)
+
+- Stricter field parsing: a leading `+` sign (`+5`) and zero-padded numbers (`007`, `00`) are now rejected as non-canonical, matching standard Vixie cron. The single digit `0` stays valid.
+- The `Upcoming` iterator type is now `#[must_use]`, so binding it without consuming the iterator is linted.
+
 ## 0.1.0 (2026-06-15)
 
 - Parse Vixie-standard cron expressions (five or six fields, macros).
