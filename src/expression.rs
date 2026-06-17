@@ -142,7 +142,6 @@ impl CronSchedule {
     /// assert_eq!(iter.next(), Some(datetime!(2026-01-01 09:00:00 UTC)));
     /// assert_eq!(iter.next(), Some(datetime!(2026-01-02 09:00:00 UTC)));
     /// ```
-    #[must_use]
     pub fn upcoming(&self, from: OffsetDateTime) -> Upcoming<'_> {
         Upcoming::new(self, from)
     }

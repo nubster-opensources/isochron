@@ -9,7 +9,20 @@ use crate::expression::CronSchedule;
 /// Created by [`CronSchedule::upcoming`]. Each call to `next` advances the
 /// cursor to the yielded occurrence, so iteration is strictly increasing. It
 /// ends when no further occurrence exists within the search horizon.
+///
+/// The iterator has no effect until it is consumed, so dropping it without
+/// iterating is almost always a mistake and is linted:
+///
+/// ```compile_fail
+/// #![deny(unused_must_use)]
+/// use isochron::CronSchedule;
+/// use time::OffsetDateTime;
+///
+/// let schedule = CronSchedule::parse("0 0 * * *").unwrap();
+/// schedule.upcoming(OffsetDateTime::UNIX_EPOCH);
+/// ```
 #[derive(Debug, Clone)]
+#[must_use = "an Upcoming iterator does nothing unless consumed"]
 pub struct Upcoming<'a> {
     schedule: &'a CronSchedule,
     cursor: OffsetDateTime,
