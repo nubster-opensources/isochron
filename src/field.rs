@@ -202,6 +202,15 @@ fn resolve_value(raw: &str, kind: FieldKind, part: &str) -> Result<u8, CronError
 }
 
 fn parse_numeric(raw: &str, kind: FieldKind, part: &str) -> Result<u8, CronError> {
+    // Vixie cron accepts only plain decimal digits. Reject a leading '+' sign
+    // and redundant leading zeros ("+5", "007", "00") that u32 parsing would
+    // otherwise accept silently, while keeping the single digit "0" valid.
+    let is_canonical = !raw.is_empty()
+        && raw.bytes().all(|byte| byte.is_ascii_digit())
+        && (raw.len() == 1 || raw.as_bytes()[0] != b'0');
+    if !is_canonical {
+        return Err(invalid(kind, part, "not a number"));
+    }
     // Parse as u32 first so out-of-range values produce ValueOutOfRange rather
     // than a generic parse error.
     let parsed = raw
@@ -343,5 +352,60 @@ mod tests {
             error,
             CronError::InvalidField { field: "hour", .. }
         ));
+    }
+
+    // Issue #23: standard Vixie cron accepts only plain decimal digits. A
+    // leading '+' sign or redundant leading zeros are non-canonical and must
+    // be rejected, while the single digit "0" stays valid.
+    #[test]
+    fn leading_plus_numeric_is_rejected() {
+        let error = FieldSchedule::parse("+5", MINUTE).unwrap_err();
+        assert!(matches!(
+            error,
+            CronError::InvalidField {
+                field: "minute",
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn zero_padded_numeric_is_rejected() {
+        for token in ["007", "00"] {
+            let error = FieldSchedule::parse(token, MINUTE).unwrap_err();
+            assert!(matches!(
+                error,
+                CronError::InvalidField {
+                    field: "minute",
+                    ..
+                }
+            ));
+        }
+    }
+
+    #[test]
+    fn bare_zero_stays_valid() {
+        let field = FieldSchedule::parse("0", MINUTE).expect("valid");
+        assert_eq!(field.values(), vec![0]);
+    }
+
+    #[test]
+    fn weekday_non_canonical_numeric_is_rejected() {
+        for token in ["007", "+0"] {
+            let error = FieldSchedule::parse(token, DAY_OF_WEEK).unwrap_err();
+            assert!(matches!(
+                error,
+                CronError::InvalidField {
+                    field: "day-of-week",
+                    ..
+                }
+            ));
+        }
+    }
+
+    #[test]
+    fn weekday_bare_zero_is_sunday() {
+        let field = FieldSchedule::parse("0", DAY_OF_WEEK).expect("valid");
+        assert_eq!(field.values(), vec![0]);
     }
 }
