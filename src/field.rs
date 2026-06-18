@@ -116,6 +116,9 @@ fn parse_part(part: &str, kind: FieldKind) -> Result<u64, CronError> {
     }
     let (range_token, step) = match part.split_once('/') {
         Some((range_token, step_token)) => {
+            if !is_canonical_decimal(step_token) {
+                return Err(invalid(kind, part, "step is not a number"));
+            }
             let step = step_token
                 .parse::<u8>()
                 .map_err(|_| invalid(kind, part, "step is not a number"))?;
@@ -201,14 +204,18 @@ fn resolve_value(raw: &str, kind: FieldKind, part: &str) -> Result<u8, CronError
     Ok(value)
 }
 
-fn parse_numeric(raw: &str, kind: FieldKind, part: &str) -> Result<u8, CronError> {
-    // Vixie cron accepts only plain decimal digits. Reject a leading '+' sign
-    // and redundant leading zeros ("+5", "007", "00") that u32 parsing would
-    // otherwise accept silently, while keeping the single digit "0" valid.
-    let is_canonical = !raw.is_empty()
+/// Whether `raw` is a canonical non-negative decimal token: ASCII digits only,
+/// no leading '+' sign, and no redundant leading zero. The single digit "0" is
+/// canonical, but "00", "007" and "+5" are not. `u32`/`u8` parsing would accept
+/// the latter silently, so both numeric paths gate on this first.
+fn is_canonical_decimal(raw: &str) -> bool {
+    !raw.is_empty()
         && raw.bytes().all(|byte| byte.is_ascii_digit())
-        && (raw.len() == 1 || raw.as_bytes()[0] != b'0');
-    if !is_canonical {
+        && (raw.len() == 1 || raw.as_bytes()[0] != b'0')
+}
+
+fn parse_numeric(raw: &str, kind: FieldKind, part: &str) -> Result<u8, CronError> {
+    if !is_canonical_decimal(raw) {
         return Err(invalid(kind, part, "not a number"));
     }
     // Parse as u32 first so out-of-range values produce ValueOutOfRange rather
@@ -407,5 +414,36 @@ mod tests {
     fn weekday_bare_zero_is_sunday() {
         let field = FieldSchedule::parse("0", DAY_OF_WEEK).expect("valid");
         assert_eq!(field.values(), vec![0]);
+    }
+
+    // Issue #27: the step token of `/N` must follow the same canonical rule as
+    // values; a leading '+' or zero-padding is rejected.
+    #[test]
+    fn non_canonical_step_is_rejected() {
+        for token in ["*/+5", "*/007", "*/05"] {
+            let error = FieldSchedule::parse(token, MINUTE).unwrap_err();
+            assert!(matches!(
+                error,
+                CronError::InvalidField {
+                    field: "minute",
+                    ..
+                }
+            ));
+        }
+    }
+
+    #[test]
+    fn canonical_step_stays_valid() {
+        let field = FieldSchedule::parse("*/20", MINUTE).expect("valid");
+        assert_eq!(field.values(), vec![0, 20, 40]);
+    }
+
+    #[test]
+    fn zero_step_still_reports_zero_error() {
+        let error = FieldSchedule::parse("*/0", MINUTE).unwrap_err();
+        assert!(matches!(
+            error,
+            CronError::InvalidField { field: "minute", reason, .. } if reason.contains("greater than zero")
+        ));
     }
 }
