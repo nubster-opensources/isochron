@@ -117,7 +117,11 @@ fn parse_part(part: &str, kind: FieldKind) -> Result<u64, CronError> {
     let (range_token, step) = match part.split_once('/') {
         Some((range_token, step_token)) => {
             if !is_canonical_decimal(step_token) {
-                return Err(invalid(kind, part, "step is not a number"));
+                return Err(invalid(
+                    kind,
+                    part,
+                    "step is not a canonical number (no leading sign or zero-padding)",
+                ));
             }
             let step = step_token
                 .parse::<u8>()
@@ -216,7 +220,11 @@ fn is_canonical_decimal(raw: &str) -> bool {
 
 fn parse_numeric(raw: &str, kind: FieldKind, part: &str) -> Result<u8, CronError> {
     if !is_canonical_decimal(raw) {
-        return Err(invalid(kind, part, "not a number"));
+        return Err(invalid(
+            kind,
+            part,
+            "not a canonical number (no leading sign or zero-padding)",
+        ));
     }
     // Parse as u32 first so out-of-range values produce ValueOutOfRange rather
     // than a generic parse error.
@@ -445,5 +453,16 @@ mod tests {
             error,
             CronError::InvalidField { field: "minute", reason, .. } if reason.contains("greater than zero")
         ));
+    }
+
+    #[test]
+    fn non_canonical_error_message_mentions_canonical() {
+        for token in ["+5", "*/+5"] {
+            let error = FieldSchedule::parse(token, MINUTE).unwrap_err();
+            assert!(matches!(
+                error,
+                CronError::InvalidField { reason, .. } if reason.contains("canonical")
+            ));
+        }
     }
 }
