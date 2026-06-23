@@ -1,5 +1,7 @@
 # isochron
 
+> A pure, deterministic cron occurrence engine on `time`: parse Vixie-standard cron expressions and compute next and previous occurrences in strict UTC.
+
 [![crates.io](https://img.shields.io/crates/v/isochron.svg)](https://crates.io/crates/isochron)
 [![docs.rs](https://img.shields.io/docsrs/isochron)](https://docs.rs/isochron)
 [![CI](https://github.com/nubster-opensources/isochron/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/nubster-opensources/isochron/actions/workflows/ci.yml)
@@ -7,8 +9,6 @@
 [![License: MIT OR Apache-2.0](https://img.shields.io/badge/License-MIT%20OR%20Apache--2.0-blue.svg)](#license)
 [![Status](https://img.shields.io/badge/status-alpha-yellow)](#status)
 [![Made with Rust](https://img.shields.io/badge/made%20with-Rust-orange?logo=rust)](https://www.rust-lang.org/)
-
-> A pure, deterministic cron occurrence engine on `time`: parse Vixie-standard cron expressions and compute next and previous occurrences in strict UTC.
 
 isochron parses five- and six-field Vixie cron expressions and computes the next or previous occurrence within a bounded horizon. It is a library, not a scheduler: it tells you when something should run and leaves running it to your own runtime. No async, no `chrono`, no `unsafe`.
 
