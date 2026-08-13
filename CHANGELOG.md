@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- Raise the MSRV from Rust 1.88 to 1.89 for the August 2026 fleet baseline and prefer MSRV-compatible dependency versions during Cargo updates.
+
 ## [0.1.1] - 2026-06-18
 
 ### Changed
@@ -22,5 +28,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Value equality and hashing ignore source spelling: equivalent schedules (for example `0` and `7`, or `MON` and `1`) now compare equal.
 - `describe` collapses full fields instead of enumerating them and renders six-field expressions with clearer phrasing.
 
+[Unreleased]: https://github.com/nubster-opensources/isochron/compare/v0.1.1...HEAD
 [0.1.1]: https://github.com/nubster-opensources/isochron/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/nubster-opensources/isochron/releases/tag/v0.1.0
