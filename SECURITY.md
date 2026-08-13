@@ -4,7 +4,7 @@
 
 isochron follows the [semver policy](docs/SEMVER_POLICY.md). During the 0.x
 phase, only the latest minor release receives security fixes. The current
-supported release line is **0.1.x** (MSRV: Rust 1.88).
+supported release line is **0.1.x** (MSRV: Rust 1.89).
 
 | Version | Supported          |
 | ------- | ------------------ |
