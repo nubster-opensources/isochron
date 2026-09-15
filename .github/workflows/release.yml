@@ -74,6 +74,10 @@ jobs:
         with:
           fetch-depth: 0
 
+      - uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: "1.89.0"
+
       - name: Extract version from tag
         id: version
         shell: bash
@@ -92,15 +96,8 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
         shell: bash
         run: |
-          awk -v v="[$VERSION]" '
-            $0 ~ "^## " v {flag=1; next}
-            /^## \[/ {flag=0}
-            flag {print}
-          ' CHANGELOG.md > release-notes.md
-          if [[ ! -s release-notes.md ]]; then
-            echo "No changelog section found for [$VERSION]; using a placeholder."
-            echo "See [CHANGELOG.md](./CHANGELOG.md) for details." > release-notes.md
-          fi
+          set -euo pipefail
+          cargo xtask release-notes "$VERSION" > release-notes.md
           echo "--- Release notes preview ---"
           cat release-notes.md
 

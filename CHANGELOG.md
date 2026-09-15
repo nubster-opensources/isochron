@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Raise the MSRV from Rust 1.88 to 1.89 for the August 2026 fleet baseline and prefer MSRV-compatible dependency versions during Cargo updates.
+- Release tooling moved from a shell script and cargo-release to a dependency-free `cargo xtask` (`release-prep`, `release-notes`).
 
 ### Fixed
 
@@ -20,6 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Day-of-week out-of-range errors now report the accepted upper bound `7` (the Sunday alias) instead of `6`. (#44)
 - A day-of-week step starting from the Sunday alias, such as `7/2`, is now rejected with an explicit reason instead of a misleading range error. (#63)
 - The README quick start now shows the actual `next_after` and `describe` results and runs as a doctest, so it can no longer drift. (#43)
+- Release preparation no longer aborts on the current changelog format: graduation turns `[Unreleased]` into a dated version heading, reopens an empty `[Unreleased]` section, updates the compare links, and fails with an explicit message before creating a branch when the section is missing, malformed or empty. The preparation branch is now `chore/release-vX.Y.Z`. (#29)
+- Release notes are now extracted from the matching changelog section by exact heading comparison, and a missing section fails the release instead of publishing placeholder notes. (#42)
 
 ## [0.1.1] - 2026-06-18
 

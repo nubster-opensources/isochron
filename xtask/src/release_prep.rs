@@ -10,20 +10,144 @@ pub(crate) trait CommandRunner {
     fn run(&mut self, program: &str, arguments: &[&str]) -> Result<String, XtaskError>;
 }
 
+/// Runs external commands as real OS processes, rooted at `repository_root`.
+pub(crate) struct ProcessRunner {
+    /// The directory every spawned process runs in.
+    repository_root: std::path::PathBuf,
+}
+
+impl ProcessRunner {
+    /// Creates a process runner that executes every command inside `repository_root`.
+    pub(crate) fn new(repository_root: std::path::PathBuf) -> Self {
+        Self { repository_root }
+    }
+}
+
+impl CommandRunner for ProcessRunner {
+    fn run(&mut self, program: &str, arguments: &[&str]) -> Result<String, XtaskError> {
+        let output = std::process::Command::new(program)
+            .args(arguments)
+            .current_dir(&self.repository_root)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::inherit())
+            .output()?;
+
+        // Forward the captured standard output to our own, so CI logs still
+        // show the wrapped command's output, in addition to returning it.
+        {
+            use std::io::Write as _;
+            let mut stdout = std::io::stdout();
+            let _ = stdout.write_all(&output.stdout);
+            let _ = stdout.flush();
+        }
+
+        if !output.status.success() {
+            return Err(XtaskError::CommandFailed {
+                program: program.to_string(),
+                status: output.status.to_string(),
+            });
+        }
+
+        Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+    }
+}
+
 /// Builds the release branch name for `version`, `chore/release-vX.Y.Z`.
-pub(crate) fn branch_name(_version: &Version) -> String {
-    todo!()
+pub(crate) fn branch_name(version: &Version) -> String {
+    format!("chore/release-v{version}")
+}
+
+/// Builds the pull request body explaining what happens after this pull request merges.
+fn release_pull_request_body(version: &Version) -> String {
+    format!(
+        "This pull request bumps isochron to {version} and graduates the changelog.\n\
+\n\
+After this pull request is merged, push the annotated tag `v{version}` to trigger the Release workflow:\n\
+\n\
+```\n\
+git tag -a v{version} -m \"v{version}\"\n\
+git push origin v{version}\n\
+```\n\
+\n\
+The Release workflow then publishes the crate to crates.io and creates the GitHub Release."
+    )
 }
 
 /// Runs the full release preparation workflow against `repository_root`.
 pub(crate) fn prepare_release(
-    _repository_root: &std::path::Path,
-    _request: &VersionRequest,
-    _date: &str,
-    _is_dry_run: bool,
-    _runner: &mut dyn CommandRunner,
+    repository_root: &std::path::Path,
+    request: &VersionRequest,
+    date: &str,
+    is_dry_run: bool,
+    runner: &mut dyn CommandRunner,
 ) -> Result<Version, XtaskError> {
-    todo!()
+    let current_branch = runner.run("git", &["rev-parse", "--abbrev-ref", "HEAD"])?;
+    let current_branch = current_branch.trim();
+    if current_branch != "main" {
+        return Err(XtaskError::NotOnMain {
+            branch: current_branch.to_string(),
+        });
+    }
+
+    let status = runner.run("git", &["status", "--porcelain"])?;
+    if !status.trim().is_empty() {
+        return Err(XtaskError::DirtyWorkingTree);
+    }
+
+    runner.run("git", &["pull", "--ff-only", "origin", "main"])?;
+
+    let manifest_path = repository_root.join("Cargo.toml");
+    let changelog_path = repository_root.join("CHANGELOG.md");
+    let manifest = std::fs::read_to_string(&manifest_path)?;
+    let changelog = std::fs::read_to_string(&changelog_path)?;
+
+    let current_version = crate::manifest::package_version(&manifest)?;
+    let target_version = request.resolve(&current_version)?;
+    let graduated_changelog = crate::changelog::graduate(&changelog, &target_version, date)?;
+    let updated_manifest = crate::manifest::with_package_version(&manifest, &target_version)?;
+
+    let branch = branch_name(&target_version);
+    runner.run("git", &["checkout", "-b", &branch])?;
+
+    std::fs::write(&manifest_path, &updated_manifest)?;
+    std::fs::write(&changelog_path, &graduated_changelog)?;
+
+    runner.run("git", &["add", "CHANGELOG.md", "Cargo.toml"])?;
+    let commit_message = format!(
+        "release(v{target_version}): bump isochron to {target_version} and graduate the changelog"
+    );
+    runner.run("git", &["commit", "-m", &commit_message])?;
+
+    runner.run("cargo", &["fmt", "--all", "--check"])?;
+    runner.run(
+        "cargo",
+        &[
+            "clippy",
+            "--workspace",
+            "--all-targets",
+            "--all-features",
+            "--",
+            "-D",
+            "warnings",
+        ],
+    )?;
+    runner.run("cargo", &["test", "--workspace", "--all-features"])?;
+
+    if !is_dry_run {
+        runner.run("git", &["push", "-u", "origin", &branch])?;
+
+        let title = format!("release(v{target_version}): bump isochron and graduate the changelog");
+        let body = release_pull_request_body(&target_version);
+        runner.run(
+            "gh",
+            &[
+                "pr", "create", "--base", "main", "--head", &branch, "--title", &title, "--body",
+                &body,
+            ],
+        )?;
+    }
+
+    Ok(target_version)
 }
 
 #[cfg(test)]

@@ -1,8 +1,8 @@
-//! Strict SemVer core version type and version bump requests.
+//! Strict `SemVer` core version type and version bump requests.
 
 use crate::error::XtaskError;
 
-/// A strict SemVer core version: `major.minor.patch`, no prerelease or build metadata.
+/// A strict `SemVer` core version: `major.minor.patch`, no prerelease or build metadata.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct Version {
     major: u64,
@@ -21,17 +21,45 @@ impl Version {
     }
 }
 
+/// Parses one dot separated component of a version: digits only, and no
+/// leading zero unless the component is exactly `0`.
+fn parse_strict_component(component: &str) -> Option<u64> {
+    if component.is_empty() || !component.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    if component != "0" && component.starts_with('0') {
+        return None;
+    }
+    component.parse::<u64>().ok()
+}
+
 impl std::str::FromStr for Version {
     type Err = XtaskError;
 
-    fn from_str(_input: &str) -> Result<Self, Self::Err> {
-        todo!()
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
+        let invalid = || XtaskError::InvalidVersion {
+            input: input.to_string(),
+        };
+
+        let mut components = input.split('.');
+        let major = components.next().ok_or_else(invalid)?;
+        let minor = components.next().ok_or_else(invalid)?;
+        let patch = components.next().ok_or_else(invalid)?;
+        if components.next().is_some() {
+            return Err(invalid());
+        }
+
+        let major = parse_strict_component(major).ok_or_else(invalid)?;
+        let minor = parse_strict_component(minor).ok_or_else(invalid)?;
+        let patch = parse_strict_component(patch).ok_or_else(invalid)?;
+
+        Ok(Self::new(major, minor, patch))
     }
 }
 
 impl std::fmt::Display for Version {
-    fn fmt(&self, _formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        todo!()
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "{}.{}.{}", self.major, self.minor, self.patch)
     }
 }
 
@@ -58,15 +86,36 @@ pub(crate) enum VersionRequest {
 impl std::str::FromStr for VersionRequest {
     type Err = XtaskError;
 
-    fn from_str(_input: &str) -> Result<Self, Self::Err> {
-        todo!()
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
+        match input {
+            "patch" => Ok(Self::Level(BumpLevel::Patch)),
+            "minor" => Ok(Self::Level(BumpLevel::Minor)),
+            "major" => Ok(Self::Level(BumpLevel::Major)),
+            _ => input.parse::<Version>().map(Self::Exact),
+        }
     }
 }
 
 impl VersionRequest {
     /// Refuses a target that is not strictly greater than `current`.
-    pub(crate) fn resolve(&self, _current: &Version) -> Result<Version, XtaskError> {
-        todo!()
+    pub(crate) fn resolve(&self, current: &Version) -> Result<Version, XtaskError> {
+        let target = match self {
+            Self::Level(BumpLevel::Patch) => {
+                Version::new(current.major, current.minor, current.patch + 1)
+            }
+            Self::Level(BumpLevel::Minor) => Version::new(current.major, current.minor + 1, 0),
+            Self::Level(BumpLevel::Major) => Version::new(current.major + 1, 0, 0),
+            Self::Exact(version) => *version,
+        };
+
+        if target <= *current {
+            return Err(XtaskError::VersionNotGreater {
+                current: current.to_string(),
+                target: target.to_string(),
+            });
+        }
+
+        Ok(target)
     }
 }
 

@@ -29,7 +29,7 @@ pub(crate) enum XtaskError {
         /// The version that was requested.
         version: String,
     },
-    /// A version string does not parse as a strict SemVer core `x.y.z`.
+    /// A version string does not parse as a strict `SemVer` core `x.y.z`.
     InvalidVersion {
         /// The raw input that failed to parse.
         input: String,
@@ -64,12 +64,74 @@ pub(crate) enum XtaskError {
 }
 
 impl std::fmt::Display for XtaskError {
-    fn fmt(&self, _formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        todo!()
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::MissingUnreleasedSection => write!(
+                formatter,
+                "CHANGELOG.md has no `## [Unreleased]` heading; add one above the latest release"
+            ),
+            Self::MalformedUnreleasedHeading { line } => write!(
+                formatter,
+                "CHANGELOG.md has a heading that looks like the unreleased section but is not exactly `## [Unreleased]`: `{line}`; rename it to `## [Unreleased]`"
+            ),
+            Self::EmptyUnreleasedSection => write!(
+                formatter,
+                "The `## [Unreleased]` section in CHANGELOG.md has no content; add at least one bullet before preparing a release"
+            ),
+            Self::VersionAlreadyReleased { version } => write!(
+                formatter,
+                "Version `{version}` already has a released section in CHANGELOG.md; choose a different version"
+            ),
+            Self::MissingUnreleasedLink => write!(
+                formatter,
+                "CHANGELOG.md has no `[Unreleased]: ` link reference definition; add one so the compare link can be updated"
+            ),
+            Self::SectionNotFound { version } => write!(
+                formatter,
+                "CHANGELOG.md has no `## [{version}]` section; check the version number"
+            ),
+            Self::EmptySection { version } => write!(
+                formatter,
+                "The `## [{version}]` section in CHANGELOG.md has no content"
+            ),
+            Self::InvalidVersion { input } => write!(
+                formatter,
+                "`{input}` is not a valid version; expected a strict SemVer core `x.y.z` with no leading zeros, prerelease or build metadata"
+            ),
+            Self::VersionNotGreater { current, target } => write!(
+                formatter,
+                "Requested version `{target}` is not strictly greater than the current version `{current}`; choose a higher version"
+            ),
+            Self::ManifestVersionNotFound => write!(
+                formatter,
+                "Cargo.toml has no `version` key under `[package]`; add one before running this command"
+            ),
+            Self::NotOnMain { branch } => write!(
+                formatter,
+                "Must be on branch `main` to prepare a release, but the current branch is `{branch}`; switch to `main` first"
+            ),
+            Self::DirtyWorkingTree => write!(
+                formatter,
+                "The working tree has uncommitted changes; commit or stash them before preparing a release"
+            ),
+            Self::CommandFailed { program, status } => write!(
+                formatter,
+                "Command `{program}` failed with exit status {status}; check its output above for details"
+            ),
+            Self::Io(error) => write!(formatter, "input and output error: {error}"),
+            Self::Usage(message) => write!(formatter, "{message}"),
+        }
     }
 }
 
-impl std::error::Error for XtaskError {}
+impl std::error::Error for XtaskError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Io(error) => Some(error),
+            _ => None,
+        }
+    }
+}
 
 impl From<std::io::Error> for XtaskError {
     fn from(error: std::io::Error) -> Self {

@@ -8,13 +8,18 @@ on:
         required: true
         type: string
         default: "patch"
+      dry_run:
+        description: "Prepare locally in the runner without pushing or opening a pull request"
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 jobs:
   bump:
-    name: Run release prep script
+    name: Prepare a release
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -33,21 +38,20 @@ jobs:
         with:
           key: bump
 
-      - name: Install cargo-release
-        # Pinned to the latest version that supports our MSRV (Rust 1.89).
-        # cargo-release 1.1+ requires Rust 1.91+.
-        run: cargo install --locked cargo-release@0.25.20
-
       - name: Configure git identity
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: Run release prep script
+      - name: Run release preparation
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           LEVEL: ${{ inputs.level }}
-        # Invoked via `bash` explicitly so the runner does not depend on
-        # the executable bit, which is not always preserved when the
-        # script is committed from a Windows workstation.
-        run: bash scripts/release.sh "$LEVEL"
+          DRY_RUN: ${{ inputs.dry_run }}
+        shell: bash
+        run: |
+          if [[ "$DRY_RUN" == "true" ]]; then
+            cargo xtask release-prep "$LEVEL" --dry-run
+          else
+            cargo xtask release-prep "$LEVEL"
+          fi
