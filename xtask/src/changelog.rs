@@ -430,6 +430,24 @@ mod tests {
     }
 
     #[test]
+    fn heading_with_trailing_text_not_introduced_by_a_dash_is_not_a_match() {
+        let changelog = r"## [0.1.1]rc
+
+### Changed
+
+- Not a release heading.
+
+## [0.1.1] 2026-06-18
+
+### Changed
+
+- Missing the dash separator.
+";
+        let error = release_notes(changelog, "0.1.1").unwrap_err();
+        assert!(matches!(error, XtaskError::SectionNotFound { version } if version == "0.1.1"));
+    }
+
+    #[test]
     fn oldest_section_stops_before_link_definitions() {
         let changelog = r"## [0.1.0] - 2026-06-15
 
