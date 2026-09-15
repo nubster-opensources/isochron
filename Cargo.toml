@@ -34,3 +34,6 @@ similar_names = "allow"
 lto = "thin"
 codegen-units = 1
 strip = "symbols"
+
+[workspace]
+members = ["xtask"]
