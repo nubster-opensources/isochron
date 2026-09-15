@@ -239,4 +239,13 @@ mod tests {
     fn describe_no_doubled_past() {
         assert!(!describe("0/30 30 9 * * *").contains("past"));
     }
+
+    // Issue #43: the README quick start expression, pinned to the canonical wording.
+    #[test]
+    fn weekday_range_is_enumerated() {
+        assert_eq!(
+            describe("0 9 * * MON-FRI"),
+            "at 09:00 on Monday, Tuesday, Wednesday, Thursday and Friday"
+        );
+    }
 }
