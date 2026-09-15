@@ -40,6 +40,15 @@ Items that are explicitly NOT part of the public API:
 - Anything under a module annotated `#[doc(hidden)]`.
 - Test-only helpers under `#[cfg(test)]`.
 
+## Human-readable output
+
+Signatures are covered by the rules above. The English text returned by
+`CronSchedule::describe` is covered by a lighter rule: it is stable within a
+minor release line (a patch release never changes it except to fix a clear
+mistake), and it may change in a minor release, including after `1.0`,
+announced under `Changed` in `CHANGELOG.md`. Consumers display it; they must
+not parse it.
+
 ## Deprecation cycle
 
 When an item is to be removed:

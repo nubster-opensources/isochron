@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- A stability rule for the wording of `describe()`: unchanged within a minor release line, documented in the rustdoc and in `docs/SEMVER_POLICY.md`. (#43)
+
 ### Changed
 
 - Raise the MSRV from Rust 1.88 to 1.89 for the August 2026 fleet baseline and prefer MSRV-compatible dependency versions during Cargo updates.
@@ -15,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `CronSchedule::is_match` now returns `false` for instants with a non-zero nanosecond, consistent with `next_after` and `prev_before` which only yield whole-second occurrences. (#40)
 - Day-of-week out-of-range errors now report the accepted upper bound `7` (the Sunday alias) instead of `6`. (#44)
 - A day-of-week step starting from the Sunday alias, such as `7/2`, is now rejected with an explicit reason instead of a misleading range error. (#63)
+- The README quick start now shows the actual `next_after` and `describe` results and runs as a doctest, so it can no longer drift. (#43)
 
 ## [0.1.1] - 2026-06-18
 

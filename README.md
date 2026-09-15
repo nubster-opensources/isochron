@@ -34,9 +34,14 @@ use time::macros::datetime;
 let schedule = CronSchedule::parse("0 9 * * MON-FRI").unwrap();
 let after = datetime!(2026-01-01 12:00:00 UTC);
 let next = schedule.next_after(after).unwrap();
-println!("next: {}", next);          // next: 2026-01-02 09:00:00.0 +00:00:00
-println!("{}", schedule.describe()); // "At 09:00, Monday through Friday"
+assert_eq!(next, datetime!(2026-01-02 09:00:00 UTC)); // the next weekday, Friday
+assert_eq!(
+    schedule.describe(),
+    "at 09:00 on Monday, Tuesday, Wednesday, Thursday and Friday"
+);
 ```
+
+The quick start above runs as a doctest, so it always reflects the crate's actual behaviour. `describe()` produces English meant for display; see its stability note in the [API documentation](https://docs.rs/isochron).
 
 ## Why isochron
 

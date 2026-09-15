@@ -174,6 +174,30 @@ impl CronSchedule {
     }
 
     /// An English human-readable description of the schedule.
+    ///
+    /// List fields are enumerated value by value: a range such as `MON-FRI`
+    /// is spelled out as `Monday, Tuesday, Wednesday, Thursday and Friday`,
+    /// not compacted back into a range.
+    ///
+    /// # Stability
+    ///
+    /// The wording is stable within a minor release line: a patch release
+    /// never changes it except to fix a clear mistake, while a minor release
+    /// may change it, including after `1.0`, and the change is then
+    /// announced under `Changed` in the changelog. See `docs/SEMVER_POLICY.md`
+    /// for the full policy. The text is meant for display; do not parse it.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use isochron::CronSchedule;
+    ///
+    /// let schedule = CronSchedule::parse("0 9 * * MON-FRI").expect("valid");
+    /// assert_eq!(
+    ///     schedule.describe(),
+    ///     "at 09:00 on Monday, Tuesday, Wednesday, Thursday and Friday"
+    /// );
+    /// ```
     #[must_use]
     pub fn describe(&self) -> String {
         crate::describe::describe(self)

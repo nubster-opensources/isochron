@@ -25,3 +25,9 @@ pub use error::CronError;
 pub use expression::CronSchedule;
 pub use iter::Upcoming;
 pub use occurrence::SEARCH_HORIZON_YEARS;
+
+/// Runs the Rust code blocks of `README.md` as doctests, so the quick start
+/// cannot drift from the crate's actual behaviour.
+#[doc = include_str!("../README.md")]
+#[cfg(doctest)]
+pub struct ReadmeDoctests;
