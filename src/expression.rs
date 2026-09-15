@@ -74,6 +74,11 @@ impl CronSchedule {
     /// such as `22-2` for hours is a parse error; use a comma list `22-23,0-2`
     /// instead.
     ///
+    /// **Steps.** `*/n` steps over the whole field, `a-b/n` over a range, and
+    /// `a/n` from `a` up to the field maximum (so `5/10` in hours matches 5 and
+    /// 15). In day-of-week a step cannot start from the Sunday alias `7`: `7/n`
+    /// is a parse error; start from `0` or `SUN` instead.
+    ///
     /// **Sunday in day-of-week.** Both `0` and `7` denote Sunday. `7` is valid
     /// in ranges: `5-7` matches Friday, Saturday, and Sunday.
     ///
@@ -360,6 +365,17 @@ mod tests {
         let a = CronSchedule::parse("0 0 * * 1").expect("valid");
         let b = CronSchedule::parse("0 0 * * 2").expect("valid");
         assert_ne!(a, b);
+    }
+
+    // Issue #63: a step cannot start from the alias 7 (Sunday). The rejection
+    // must surface all the way up through CronSchedule::parse.
+    #[test]
+    fn parse_rejects_step_from_sunday_alias() {
+        let error = CronSchedule::parse("0 0 * * 7/2").unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "invalid day-of-week field, token \"7/2\": a step cannot start from the alias 7; start from 0 instead"
+        );
     }
 
     // Issue #40: cron has second resolution, so an instant carrying a nonzero

@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `CronSchedule::is_match` now returns `false` for instants with a non-zero nanosecond, consistent with `next_after` and `prev_before` which only yield whole-second occurrences. (#40)
 - Day-of-week out-of-range errors now report the accepted upper bound `7` (the Sunday alias) instead of `6`. (#44)
+- A day-of-week step starting from the Sunday alias, such as `7/2`, is now rejected with an explicit reason instead of a misleading range error. (#63)
 
 ## [0.1.1] - 2026-06-18
 
