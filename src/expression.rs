@@ -179,6 +179,12 @@ impl CronSchedule {
     /// The offset of `datetime` is normalised to UTC before matching, so any
     /// `OffsetDateTime` is accepted regardless of its original offset.
     ///
+    /// Cron has second resolution, so an instant carrying a non-zero
+    /// nanosecond is never an occurrence: `is_match(t)` is true exactly when
+    /// `next_after(t - 1ns) == Some(t)`. To test an arbitrary instant, such
+    /// as the current time, truncate it to the second first with
+    /// `datetime.replace_nanosecond(0)`.
+    ///
     /// # Examples
     ///
     /// ```
@@ -188,9 +194,13 @@ impl CronSchedule {
     /// let schedule = CronSchedule::parse("0 0 * * *").expect("valid");
     /// assert!(schedule.is_match(datetime!(2026-06-15 00:00:00 UTC)));
     /// assert!(!schedule.is_match(datetime!(2026-06-15 12:00:00 UTC)));
+    /// assert!(!schedule.is_match(datetime!(2026-06-15 00:00:00.5 UTC)));
     /// ```
     #[must_use]
     pub fn is_match(&self, datetime: OffsetDateTime) -> bool {
+        if datetime.nanosecond() != 0 {
+            return false;
+        }
         let datetime = datetime.to_offset(UtcOffset::UTC);
         self.second.contains(datetime.second())
             && self.minute.contains(datetime.minute())
@@ -244,6 +254,7 @@ mod tests {
     use super::CronSchedule;
     use crate::error::CronError;
     use time::macros::datetime;
+    use time::{Duration, OffsetDateTime, UtcOffset};
 
     #[test]
     fn five_fields_parse() {
@@ -349,5 +360,79 @@ mod tests {
         let a = CronSchedule::parse("0 0 * * 1").expect("valid");
         let b = CronSchedule::parse("0 0 * * 2").expect("valid");
         assert_ne!(a, b);
+    }
+
+    // Issue #40: cron has second resolution, so an instant carrying a nonzero
+    // nanosecond is never an occurrence, regardless of what its second,
+    // minute, hour, day, and month fields are.
+    #[test]
+    fn is_match_rejects_subsecond_instant_five_fields() {
+        let schedule = CronSchedule::parse("0 0 * * *").expect("valid");
+        assert!(schedule.is_match(datetime!(2026-01-01 00:00:00 UTC)));
+        assert!(!schedule.is_match(datetime!(2026-01-01 00:00:00.5 UTC)));
+        assert!(!schedule.is_match(datetime!(2026-01-01 00:00:00.000_000_001 UTC)));
+    }
+
+    #[test]
+    fn is_match_rejects_subsecond_instant_six_fields() {
+        let schedule = CronSchedule::parse("30 0 0 * * *").expect("valid");
+        assert!(schedule.is_match(datetime!(2026-01-01 00:00:30 UTC)));
+        assert!(!schedule.is_match(datetime!(2026-01-01 00:00:30.5 UTC)));
+        assert!(!schedule.is_match(datetime!(2026-01-01 00:00:30.000_000_001 UTC)));
+    }
+
+    #[test]
+    fn is_match_normalises_offset_and_still_rejects_nanoseconds() {
+        let schedule = CronSchedule::parse("0 0 * * *").expect("valid");
+        assert!(schedule.is_match(datetime!(2026-01-01 02:00:00 +02:00)));
+        assert!(!schedule.is_match(datetime!(2026-01-01 02:00:00.000_000_001 +02:00)));
+    }
+
+    #[test]
+    fn is_match_agrees_with_next_after_on_sampled_instants() {
+        let cases: Vec<(&str, OffsetDateTime)> = vec![
+            ("0 0 * * *", datetime!(2026-01-01 00:00:00 UTC)),
+            ("0 0 * * *", datetime!(2026-01-01 00:00:00.000_000_001 UTC)),
+            ("0 0 * * *", datetime!(2026-01-01 00:00:00.5 UTC)),
+            ("0 0 * * *", datetime!(2025-12-31 23:59:59.999_999_999 UTC)),
+            ("0 0 * * *", datetime!(2026-01-01 12:00:00 UTC)),
+            ("30 0 0 * * *", datetime!(2026-01-01 00:00:30 UTC)),
+            (
+                "30 0 0 * * *",
+                datetime!(2026-01-01 00:00:30.000_000_001 UTC),
+            ),
+            ("30 0 0 * * *", datetime!(2026-01-01 00:00:30.5 UTC)),
+            (
+                "30 0 0 * * *",
+                datetime!(2026-01-01 00:00:29.999_999_999 UTC),
+            ),
+            ("30 0 0 * * *", datetime!(2026-01-01 00:00:31 UTC)),
+            ("0 0 1 * MON", datetime!(2026-06-01 00:00:00 UTC)),
+            (
+                "0 0 1 * MON",
+                datetime!(2026-06-01 00:00:00.000_000_001 UTC),
+            ),
+            ("0 0 1 * MON", datetime!(2026-06-15 00:00:00 UTC)),
+            ("0 0 1 * MON", datetime!(2026-06-16 00:00:00 UTC)),
+            ("*/15 * * * *", datetime!(2026-01-01 00:15:00 UTC)),
+            (
+                "*/15 * * * *",
+                datetime!(2026-01-01 00:15:00.000_000_001 UTC),
+            ),
+            ("*/15 * * * *", datetime!(2026-01-01 00:15:00.5 UTC)),
+            ("*/15 * * * *", datetime!(2026-01-01 00:20:00 UTC)),
+        ];
+
+        for (expression, instant) in cases {
+            let schedule = CronSchedule::parse(expression).expect("valid");
+            let previous = instant - Duration::nanoseconds(1);
+            let expected_match =
+                schedule.next_after(previous) == Some(instant.to_offset(UtcOffset::UTC));
+            assert_eq!(
+                schedule.is_match(instant),
+                expected_match,
+                "expression {expression} disagreed with next_after at {instant:?}"
+            );
+        }
     }
 }

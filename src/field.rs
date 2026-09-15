@@ -21,6 +21,10 @@ pub(crate) struct FieldKind {
     pub min: u8,
     /// The highest valid value.
     pub max: u8,
+    /// The highest value accepted in expression syntax. Equals `max` unless the
+    /// field admits cyclic aliases above its stored range, which wrap modulo
+    /// `max + 1` (day-of-week: 7 is Sunday).
+    pub accepted_max: u8,
     /// Optional name table; index 0 maps to `min`. For weekdays the table is
     /// `["SUN", "MON", ...]` with index 0 mapping to value 0.
     pub names: Option<&'static [&'static str]>,
@@ -30,30 +34,35 @@ pub(crate) const SECOND: FieldKind = FieldKind {
     name: "second",
     min: 0,
     max: 59,
+    accepted_max: 59,
     names: None,
 };
 pub(crate) const MINUTE: FieldKind = FieldKind {
     name: "minute",
     min: 0,
     max: 59,
+    accepted_max: 59,
     names: None,
 };
 pub(crate) const HOUR: FieldKind = FieldKind {
     name: "hour",
     min: 0,
     max: 23,
+    accepted_max: 23,
     names: None,
 };
 pub(crate) const DAY_OF_MONTH: FieldKind = FieldKind {
     name: "day-of-month",
     min: 1,
     max: 31,
+    accepted_max: 31,
     names: None,
 };
 pub(crate) const MONTH: FieldKind = FieldKind {
     name: "month",
     min: 1,
     max: 12,
+    accepted_max: 12,
     names: Some(&[
         "JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC",
     ]),
@@ -62,6 +71,7 @@ pub(crate) const DAY_OF_WEEK: FieldKind = FieldKind {
     name: "day-of-week",
     min: 0,
     max: 6,
+    accepted_max: 7,
     names: Some(&["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"]),
 };
 
@@ -134,11 +144,6 @@ fn parse_part(part: &str, kind: FieldKind) -> Result<u64, CronError> {
         None => (part, None),
     };
 
-    // For day-of-week we allow raw value 7 (Sunday alias) through range
-    // resolution so that ranges like "5-7" and "0-7" work correctly.  The
-    // remapping 7->0 happens below when we set bits, not here.
-    let is_dow = kind.name == DAY_OF_WEEK.name;
-
     let (start, end) = if range_token == "*" {
         (kind.min, kind.max)
     } else if let Some((low, high)) = range_token.split_once('-') {
@@ -165,13 +170,10 @@ fn parse_part(part: &str, kind: FieldKind) -> Result<u64, CronError> {
     let mut mask = 0u64;
     let mut value = start;
     while value <= end {
-        // For day-of-week, 7 is an alias for Sunday (bit 0).  Apply % 7 only
-        // for this field so other fields are never affected.
-        let bit = if is_dow {
-            u32::from(value) % 7
-        } else {
-            u32::from(value)
-        };
+        // Wrap modulo max + 1 so a cyclic alias above the stored range (day-of-week's
+        // 7 for Sunday) folds onto its bit; for every other field accepted_max equals
+        // max, so start..=end never reaches max + 1 and this is the identity.
+        let bit = u32::from(value) % (u32::from(kind.max) + 1);
         mask |= 1u64 << bit;
         value = value.saturating_add(step);
     }
@@ -188,21 +190,12 @@ fn resolve_value(raw: &str, kind: FieldKind, part: &str) -> Result<u8, CronError
         parse_numeric(raw, kind, part)?
     };
 
-    // Day-of-week: 7 is a valid Sunday alias; range check uses max=7 so that
-    // "5-7", "0-7", and single "7" all parse.  Bit remapping (7->0) happens in
-    // parse_part when the bitset is built, preserving correct range ordering.
-    let effective_max = if kind.name == DAY_OF_WEEK.name {
-        7
-    } else {
-        kind.max
-    };
-
-    if value < kind.min || value > effective_max {
+    if value < kind.min || value > kind.accepted_max {
         return Err(CronError::ValueOutOfRange {
             field: kind.name,
             value: u32::from(value),
             min: kind.min,
-            max: kind.max,
+            max: kind.accepted_max,
         });
     }
     Ok(value)
@@ -231,26 +224,21 @@ fn parse_numeric(raw: &str, kind: FieldKind, part: &str) -> Result<u8, CronError
     let parsed = raw
         .parse::<u32>()
         .map_err(|_| invalid(kind, part, "not a number"))?;
-    let ceiling = if kind.name == DAY_OF_WEEK.name {
-        7
-    } else {
-        u32::from(kind.max)
-    };
-    if parsed > ceiling {
+    if parsed > u32::from(kind.accepted_max) {
         return Err(CronError::ValueOutOfRange {
             field: kind.name,
             value: parsed,
             min: kind.min,
-            max: kind.max,
+            max: kind.accepted_max,
         });
     }
-    // The ceiling check above guarantees parsed fits in u8; make that
-    // invariant explicit rather than silently masking a conversion failure.
+    // The check above guarantees parsed fits in u8; make that invariant
+    // explicit rather than silently masking a conversion failure.
     u8::try_from(parsed).map_err(|_| CronError::ValueOutOfRange {
         field: kind.name,
         value: parsed,
         min: kind.min,
-        max: kind.max,
+        max: kind.accepted_max,
     })
 }
 
@@ -464,5 +452,82 @@ mod tests {
                 CronError::InvalidField { reason, .. } if reason.contains("canonical")
             ));
         }
+    }
+
+    // Issue #44: day-of-week accepts 0..=7 (7 is the Sunday alias), so the
+    // out-of-range error must report an accepted max of 7, not 6.
+    #[test]
+    fn day_of_week_out_of_range_error_reports_accepted_max() {
+        let error = FieldSchedule::parse("8", DAY_OF_WEEK).unwrap_err();
+        assert_eq!(
+            error,
+            CronError::ValueOutOfRange {
+                field: "day-of-week",
+                value: 8,
+                min: 0,
+                max: 7,
+            }
+        );
+        assert_eq!(
+            error.to_string(),
+            "day-of-week value 8 is out of range 0..=7"
+        );
+    }
+
+    #[test]
+    fn day_of_week_range_beyond_alias_is_rejected() {
+        let error = FieldSchedule::parse("0-8", DAY_OF_WEEK).unwrap_err();
+        assert!(matches!(
+            error,
+            CronError::ValueOutOfRange {
+                field: "day-of-week",
+                value: 8,
+                max: 7,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn day_of_week_accepts_zero_six_seven_and_alias_range() {
+        assert_eq!(
+            FieldSchedule::parse("0", DAY_OF_WEEK)
+                .expect("valid")
+                .values(),
+            vec![0]
+        );
+        assert_eq!(
+            FieldSchedule::parse("6", DAY_OF_WEEK)
+                .expect("valid")
+                .values(),
+            vec![6]
+        );
+        assert_eq!(
+            FieldSchedule::parse("7", DAY_OF_WEEK)
+                .expect("valid")
+                .values(),
+            vec![0]
+        );
+        assert_eq!(
+            FieldSchedule::parse("5-7", DAY_OF_WEEK)
+                .expect("valid")
+                .values(),
+            vec![0, 5, 6]
+        );
+    }
+
+    #[test]
+    fn minute_out_of_range_error_keeps_field_max() {
+        let error = FieldSchedule::parse("60", MINUTE).unwrap_err();
+        assert_eq!(
+            error,
+            CronError::ValueOutOfRange {
+                field: "minute",
+                value: 60,
+                min: 0,
+                max: 59,
+            }
+        );
+        assert_eq!(error.to_string(), "minute value 60 is out of range 0..=59");
     }
 }
