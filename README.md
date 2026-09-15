@@ -73,6 +73,11 @@ the leading seconds field (implicitly second 0).
 the end. An inverted range such as `22-2` for hours is rejected as a parse error.
 Use a comma list instead: `22-23,0-2`.
 
+**Steps.** `*/n` steps over the whole field, `a-b/n` over a range, and `a/n`
+from `a` up to the field maximum (so `5/10` in hours matches 5 and 15). In
+day-of-week a step cannot start from the Sunday alias `7`: `7/n` is a parse
+error; start from `0` or `SUN` instead.
+
 **Sunday in day-of-week.** Both `0` and `7` denote Sunday. `7` is accepted in
 ranges: `5-7` means Friday, Saturday, Sunday.
 
