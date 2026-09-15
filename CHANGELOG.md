@@ -10,6 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Raise the MSRV from Rust 1.88 to 1.89 for the August 2026 fleet baseline and prefer MSRV-compatible dependency versions during Cargo updates.
 
+### Fixed
+
+- `CronSchedule::is_match` now returns `false` for instants with a non-zero nanosecond, consistent with `next_after` and `prev_before` which only yield whole-second occurrences. (#40)
+- Day-of-week out-of-range errors now report the accepted upper bound `7` (the Sunday alias) instead of `6`. (#44)
+
 ## [0.1.1] - 2026-06-18
 
 ### Changed
