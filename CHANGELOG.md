@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-09-16
+
 ### Added
 
 - A stability rule for the wording of `describe()`: unchanged within a minor release line, documented in the rustdoc and in `docs/SEMVER_POLICY.md`. (#43)
@@ -29,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 
 - A release tag is now verified before anything can reach crates.io: the tag must read `vX.Y.Z`, match the packaged version, carry a non-empty changelog section, point at the commit being built, and sit on the first-parent line of `origin/main`. Publication moved to a protected environment that requires a maintainer approval and mints a short lived crates.io token through trusted publishing, so no long lived registry token is used. The manual dispatch of the release workflow can no longer publish. (#39)
+- The shared workflows that run the action pin check and the automated review are now called at a full commit SHA instead of a mutable branch, and the pin check no longer exempts those shared workflows from its own rule, so every action and reusable workflow this repository runs is verified as pinned. (#19)
 
 ## [0.1.1] - 2026-06-18
 
@@ -48,6 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Value equality and hashing ignore source spelling: equivalent schedules (for example `0` and `7`, or `MON` and `1`) now compare equal.
 - `describe` collapses full fields instead of enumerating them and renders six-field expressions with clearer phrasing.
 
-[Unreleased]: https://github.com/nubster-opensources/isochron/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/nubster-opensources/isochron/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/nubster-opensources/isochron/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/nubster-opensources/isochron/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/nubster-opensources/isochron/releases/tag/v0.1.0
