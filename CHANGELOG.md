@@ -31,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 
 - A release tag is now verified before anything can reach crates.io: the tag must read `vX.Y.Z`, match the packaged version, carry a non-empty changelog section, point at the commit being built, and sit on the first-parent line of `origin/main`. Publication moved to a protected environment that requires a maintainer approval and mints a short lived crates.io token through trusted publishing, so no long lived registry token is used. The manual dispatch of the release workflow can no longer publish. (#39)
+- The shared workflows that run the action pin check and the automated review are now called at a full commit SHA instead of a mutable branch, and the pin check no longer exempts those shared workflows from its own rule, so every action and reusable workflow this repository runs is verified as pinned. (#19)
 
 ## [0.1.1] - 2026-06-18
 
