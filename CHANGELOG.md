@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-09-16
+
 ### Added
 
 - A stability rule for the wording of `describe()`: unchanged within a minor release line, documented in the rustdoc and in `docs/SEMVER_POLICY.md`. (#43)
@@ -48,6 +50,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Value equality and hashing ignore source spelling: equivalent schedules (for example `0` and `7`, or `MON` and `1`) now compare equal.
 - `describe` collapses full fields instead of enumerating them and renders six-field expressions with clearer phrasing.
 
-[Unreleased]: https://github.com/nubster-opensources/isochron/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/nubster-opensources/isochron/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/nubster-opensources/isochron/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/nubster-opensources/isochron/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/nubster-opensources/isochron/releases/tag/v0.1.0
