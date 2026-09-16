@@ -18,8 +18,11 @@ const PACKAGE_NAME: &str = "isochron";
 /// Prereleases and build metadata are refused: crates.io ignores build metadata, which would
 /// make `v0.1.2+a` and `v0.1.2` two names for one published version.
 pub(crate) fn tag_version(tag: &str) -> Result<Version, XtaskError> {
-    let _ = tag;
-    todo!("parse a release tag into its version")
+    tag.strip_prefix('v')
+        .and_then(|rest| rest.parse::<Version>().ok())
+        .ok_or_else(|| XtaskError::InvalidReleaseTag {
+            tag: tag.to_string(),
+        })
 }
 
 /// Reads the package version out of the output of `cargo pkgid`.
@@ -28,8 +31,17 @@ pub(crate) fn tag_version(tag: &str) -> Result<Version, XtaskError> {
 /// `...#isochron@0.1.2` otherwise. Both forms are accepted, because the checkout directory
 /// name is not something a release may depend on.
 pub(crate) fn package_version_from_pkgid(pkgid_output: &str) -> Result<Version, XtaskError> {
-    let _ = pkgid_output;
-    todo!("read the package version from a cargo pkgid output")
+    let trimmed = pkgid_output.trim();
+    let after_hash = trimmed
+        .rsplit_once('#')
+        .map(|(_, after)| after)
+        .ok_or_else(|| XtaskError::UnreadablePackageId {
+            output: trimmed.to_string(),
+        })?;
+    let version_part = after_hash
+        .rsplit_once('@')
+        .map_or(after_hash, |(_, version)| version);
+    version_part.parse::<Version>()
 }
 
 /// Whether `commit` appears as a whole line of a `git rev-list --first-parent` listing.
@@ -37,8 +49,9 @@ pub(crate) fn package_version_from_pkgid(pkgid_output: &str) -> Result<Version, 
 /// The comparison is exact: an abbreviated identifier must not match a full one, otherwise a
 /// short prefix would be enough to claim membership of the released history.
 pub(crate) fn is_on_first_parent_line(commit: &str, first_parent_listing: &str) -> bool {
-    let _ = (commit, first_parent_listing);
-    todo!("decide whether a commit is on the first-parent line")
+    first_parent_listing
+        .lines()
+        .any(|line| line.trim() == commit)
 }
 
 /// Verifies that `tag` may be published from the currently checked out commit, and returns
@@ -61,8 +74,53 @@ pub(crate) fn verify_release(
     tag: &str,
     runner: &mut dyn CommandRunner,
 ) -> Result<Version, XtaskError> {
-    let _ = (repository_root, tag, runner, PACKAGE_NAME);
-    todo!("verify a release tag")
+    let version = tag_version(tag)?;
+
+    let pkgid_output = runner.run("cargo", &["pkgid", "--package", PACKAGE_NAME])?;
+    let package_version = package_version_from_pkgid(&pkgid_output)?;
+    if package_version != version {
+        return Err(XtaskError::TagVersionMismatch {
+            tag_version: version.to_string(),
+            package_version: package_version.to_string(),
+        });
+    }
+
+    let changelog = std::fs::read_to_string(repository_root.join("CHANGELOG.md"))?;
+    crate::changelog::release_notes(&changelog, &version.to_string())?;
+
+    let tag_ref_argument = format!("refs/tags/{tag}^{{commit}}");
+    let tag_commit = runner.run("git", &["rev-parse", "--verify", tag_ref_argument.as_str()])?;
+    let head_commit = runner.run("git", &["rev-parse", "--verify", "HEAD"])?;
+    let tag_commit = tag_commit.trim();
+    let head_commit = head_commit.trim();
+    if tag_commit != head_commit {
+        return Err(XtaskError::TagNotCheckedOut {
+            tag_commit: tag_commit.to_string(),
+            head_commit: head_commit.to_string(),
+        });
+    }
+
+    runner.run(
+        "git",
+        &[
+            "fetch",
+            "--no-tags",
+            "origin",
+            "+refs/heads/main:refs/remotes/origin/main",
+        ],
+    )?;
+
+    let first_parent_listing = runner.run(
+        "git",
+        &["rev-list", "--first-parent", "refs/remotes/origin/main"],
+    )?;
+    if !is_on_first_parent_line(tag_commit, &first_parent_listing) {
+        return Err(XtaskError::CommitNotOnMainLine {
+            commit: tag_commit.to_string(),
+        });
+    }
+
+    Ok(version)
 }
 
 #[cfg(test)]

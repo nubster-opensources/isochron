@@ -17,19 +17,19 @@ use crate::version::VersionRequest;
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum Invocation {
     /// Prepare a release: bump the manifest, graduate the changelog, verify, and open a pull request.
-    ReleasePrep {
+    PrepareRelease {
         /// The requested next version.
         request: VersionRequest,
         /// Whether to skip the network side effects, the push and the pull request.
         is_dry_run: bool,
     },
     /// Print the release notes body for an already released version.
-    ReleaseNotes {
+    PrintReleaseNotes {
         /// The version whose release notes body to print.
         version: String,
     },
     /// Check that a pushed release tag may be published, and print its version.
-    ReleaseVerify {
+    VerifyReleaseTag {
         /// The tag as pushed, `vX.Y.Z`.
         tag: String,
     },
@@ -62,7 +62,7 @@ pub(crate) fn parse_invocation(arguments: &[String]) -> Result<Invocation, Xtask
                 }
             }
 
-            Ok(Invocation::ReleasePrep {
+            Ok(Invocation::PrepareRelease {
                 request,
                 is_dry_run,
             })
@@ -72,11 +72,14 @@ pub(crate) fn parse_invocation(arguments: &[String]) -> Result<Invocation, Xtask
             if arguments.next().is_some() {
                 return Err(usage());
             }
-            Ok(Invocation::ReleaseNotes { version })
+            Ok(Invocation::PrintReleaseNotes { version })
         }
         "release-verify" => {
-            let _ = &mut arguments;
-            todo!("parse the release-verify invocation")
+            let tag = arguments.next().ok_or_else(usage)?.clone();
+            if arguments.next().is_some() {
+                return Err(usage());
+            }
+            Ok(Invocation::VerifyReleaseTag { tag })
         }
         _ => Err(usage()),
     }
@@ -106,7 +109,7 @@ fn repository_root() -> std::path::PathBuf {
 /// Runs the requested invocation against the real repository and process environment.
 fn run(arguments: &[String]) -> Result<(), XtaskError> {
     match parse_invocation(arguments)? {
-        Invocation::ReleasePrep {
+        Invocation::PrepareRelease {
             request,
             is_dry_run,
         } => {
@@ -123,13 +126,13 @@ fn run(arguments: &[String]) -> Result<(), XtaskError> {
             println!("{version}");
             Ok(())
         }
-        Invocation::ReleaseNotes { version } => {
+        Invocation::PrintReleaseNotes { version } => {
             let changelog = std::fs::read_to_string(repository_root().join("CHANGELOG.md"))?;
             let notes = changelog::release_notes(&changelog, &version)?;
             println!("{notes}");
             Ok(())
         }
-        Invocation::ReleaseVerify { tag } => {
+        Invocation::VerifyReleaseTag { tag } => {
             let repository_root = repository_root();
             let mut runner = command_runner::ProcessRunner::new(repository_root.clone());
             let version = release_verify::verify_release(&repository_root, &tag, &mut runner)?;
@@ -165,7 +168,7 @@ mod tests {
         let invocation = parse_invocation(&arguments(&["release-prep", "patch"])).unwrap();
         assert_eq!(
             invocation,
-            Invocation::ReleasePrep {
+            Invocation::PrepareRelease {
                 request: VersionRequest::Level(BumpLevel::Patch),
                 is_dry_run: false
             }
@@ -178,7 +181,7 @@ mod tests {
             parse_invocation(&arguments(&["release-prep", "0.2.0", "--dry-run"])).unwrap();
         assert_eq!(
             invocation,
-            Invocation::ReleasePrep {
+            Invocation::PrepareRelease {
                 request: VersionRequest::Exact(Version::new(0, 2, 0)),
                 is_dry_run: true,
             }
@@ -190,7 +193,7 @@ mod tests {
         let invocation = parse_invocation(&arguments(&["release-notes", "0.1.1"])).unwrap();
         assert_eq!(
             invocation,
-            Invocation::ReleaseNotes {
+            Invocation::PrintReleaseNotes {
                 version: "0.1.1".to_string()
             }
         );
@@ -241,7 +244,7 @@ mod tests {
         let invocation = parse_invocation(&arguments(&["release-verify", "v0.1.2"])).unwrap();
         assert_eq!(
             invocation,
-            Invocation::ReleaseVerify {
+            Invocation::VerifyReleaseTag {
                 tag: "v0.1.2".to_string()
             }
         );
@@ -254,7 +257,7 @@ mod tests {
         let invocation = parse_invocation(&arguments(&["release-verify", "not-a-tag"])).unwrap();
         assert_eq!(
             invocation,
-            Invocation::ReleaseVerify {
+            Invocation::VerifyReleaseTag {
                 tag: "not-a-tag".to_string()
             }
         );
