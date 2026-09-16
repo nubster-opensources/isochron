@@ -9,11 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - A stability rule for the wording of `describe()`: unchanged within a minor release line, documented in the rustdoc and in `docs/SEMVER_POLICY.md`. (#43)
+- `[package.metadata.docs.rs]` in `Cargo.toml`, so docs.rs builds the published documentation with all features enabled on a single target. (#34)
 
 ### Changed
 
 - Raise the MSRV from Rust 1.88 to 1.89 for the August 2026 fleet baseline and prefer MSRV-compatible dependency versions during Cargo updates.
 - Release tooling moved from a shell script and cargo-release to a dependency-free `cargo xtask` (`release-prep`, `release-notes`).
+- `docs/GOVERNANCE.md` now describes the repository as it is configured: no approving review is required while the project has a single maintainer, pull requests land as merge commits because the release verification relies on the first-parent line, and the required status checks are named exactly as branch protection names them. (#34)
 
 ### Fixed
 
