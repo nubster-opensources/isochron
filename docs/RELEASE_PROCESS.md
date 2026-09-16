@@ -75,13 +75,41 @@ git tag -a v<TARGET> -m "v<TARGET>"
 git push origin v<TARGET>
 ```
 
-The tag push triggers `.github/workflows/release.yml`, which:
+Tag creation, update and deletion are restricted to repository
+administrators, so a published version keeps its tag for good.
 
-1. Publishes `isochron` to crates.io.
-2. Creates a GitHub Release whose notes come from `cargo xtask release-notes
-   <TARGET>`, which extracts the `## [<TARGET>]` section of `CHANGELOG.md` by
-   exact heading comparison. A missing or empty section fails the release
-   job instead of publishing placeholder notes.
+The tag push triggers `.github/workflows/release.yml`, which runs three jobs
+in this order.
+
+1. **`verify`** runs `cargo xtask release-verify <tag>`, then replays the
+   whole gate (`cargo fmt --all --check`, clippy on the workspace, the test
+   suite) and packages the crate with `cargo publish --dry-run`. Nothing that
+   can reach crates.io runs before this job has passed.
+2. **`publish`** runs in the `crates-io` environment, which requires a
+   maintainer approval. It obtains a short lived crates.io token through
+   trusted publishing (no long lived registry token exists anywhere), then
+   runs `cargo publish`.
+3. **`github-release`** creates the GitHub Release. Its notes come from
+   `cargo xtask release-notes <TARGET>`, which extracts the `## [<TARGET>]`
+   section of `CHANGELOG.md` by exact heading comparison, and its version is
+   the one `verify` established, so the release and the published crate can
+   never disagree.
+
+`cargo xtask release-verify <tag>` refuses to go further unless, in order:
+
+1. the tag reads `vX.Y.Z`, with no prerelease and no build metadata;
+2. `cargo pkgid` reports exactly that version, so a tag cannot publish a
+   version the commit does not carry;
+3. `CHANGELOG.md` has a non-empty section for it, so the release notes cannot
+   fail after the crate has been published, which is irreversible;
+4. the tag points at the commit being built;
+5. that commit is on the first-parent line of `origin/main`, that is one of
+   the states `main` itself has pointed at. A commit from inside a merged
+   branch is an ancestor of `main` but was never validated as `main`, and is
+   refused.
+
+The manual dispatch of this workflow runs `verify` alone, gate and packaging
+dry run included. It can never publish.
 
 Tagging is deliberately a manual step so the human reviewing the PR is also
 the one who triggers the publish, with full awareness of what is about to
@@ -121,3 +149,15 @@ leave the workshop.
 - **`CHANGELOG.md has no [X.Y.Z] section` (at release time)**: the tag was
   pushed for a version that was never graduated into the changelog; fix the
   changelog on `main` and re-tag.
+- **`Release tag is not of the form vX.Y.Z`**: delete the tag and push a
+  corrected one. Prereleases are not supported.
+- **`Tag version does not match the packaged version`**: the tag was pushed
+  for a version this commit does not carry. Delete the tag, then tag the
+  commit whose `Cargo.toml` holds that version.
+- **`The tag points at commit A but commit B is checked out`**: the tag was
+  moved after the workflow started. Re-run the workflow.
+- **`Commit is not on the first-parent line of origin/main`**: the tag was
+  pushed from a branch, or from a commit inside a merged branch. Tag the
+  merge commit on `main` instead.
+- **The `publish` job is waiting**: it needs the `crates-io` environment
+  approval. Approve it from the workflow run page once `verify` is green.

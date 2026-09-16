@@ -24,6 +24,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Release preparation no longer aborts on the current changelog format: graduation turns `[Unreleased]` into a dated version heading, reopens an empty `[Unreleased]` section, updates the compare links, and fails with an explicit message before creating a branch when the section is missing, malformed or empty. The preparation branch is now `chore/release-vX.Y.Z`. (#29)
 - Release notes are now extracted from the matching changelog section by exact heading comparison, and a missing section fails the release instead of publishing placeholder notes. (#42)
 
+### Security
+
+- A release tag is now verified before anything can reach crates.io: the tag must read `vX.Y.Z`, match the packaged version, carry a non-empty changelog section, point at the commit being built, and sit on the first-parent line of `origin/main`. Publication moved to a protected environment that requires a maintainer approval and mints a short lived crates.io token through trusted publishing, so no long lived registry token is used. The manual dispatch of the release workflow can no longer publish. (#39)
+
 ## [0.1.1] - 2026-06-18
 
 ### Changed

@@ -3,9 +3,11 @@
 
 mod changelog;
 mod civil_date;
+mod command_runner;
 mod error;
 mod manifest;
 mod release_prep;
+mod release_verify;
 mod version;
 
 use crate::error::XtaskError;
@@ -15,23 +17,29 @@ use crate::version::VersionRequest;
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum Invocation {
     /// Prepare a release: bump the manifest, graduate the changelog, verify, and open a pull request.
-    ReleasePrep {
+    PrepareRelease {
         /// The requested next version.
         request: VersionRequest,
         /// Whether to skip the network side effects, the push and the pull request.
         is_dry_run: bool,
     },
     /// Print the release notes body for an already released version.
-    ReleaseNotes {
+    PrintReleaseNotes {
         /// The version whose release notes body to print.
         version: String,
+    },
+    /// Check that a pushed release tag may be published, and print its version.
+    VerifyReleaseTag {
+        /// The tag as pushed, `vX.Y.Z`.
+        tag: String,
     },
 }
 
 /// Usage text listing every subcommand, shown when the command line cannot be interpreted.
 const USAGE: &str = "Usage:\n  \
 cargo xtask release-prep <patch|minor|major|x.y.z> [--dry-run]\n  \
-cargo xtask release-notes <version>";
+cargo xtask release-notes <version>\n  \
+cargo xtask release-verify <vX.Y.Z>";
 
 /// Parses the process command line arguments, excluding the program name, into an [`Invocation`].
 pub(crate) fn parse_invocation(arguments: &[String]) -> Result<Invocation, XtaskError> {
@@ -54,7 +62,7 @@ pub(crate) fn parse_invocation(arguments: &[String]) -> Result<Invocation, Xtask
                 }
             }
 
-            Ok(Invocation::ReleasePrep {
+            Ok(Invocation::PrepareRelease {
                 request,
                 is_dry_run,
             })
@@ -64,7 +72,14 @@ pub(crate) fn parse_invocation(arguments: &[String]) -> Result<Invocation, Xtask
             if arguments.next().is_some() {
                 return Err(usage());
             }
-            Ok(Invocation::ReleaseNotes { version })
+            Ok(Invocation::PrintReleaseNotes { version })
+        }
+        "release-verify" => {
+            let tag = arguments.next().ok_or_else(usage)?.clone();
+            if arguments.next().is_some() {
+                return Err(usage());
+            }
+            Ok(Invocation::VerifyReleaseTag { tag })
         }
         _ => Err(usage()),
     }
@@ -94,13 +109,13 @@ fn repository_root() -> std::path::PathBuf {
 /// Runs the requested invocation against the real repository and process environment.
 fn run(arguments: &[String]) -> Result<(), XtaskError> {
     match parse_invocation(arguments)? {
-        Invocation::ReleasePrep {
+        Invocation::PrepareRelease {
             request,
             is_dry_run,
         } => {
             let repository_root = repository_root();
             let date = civil_date::civil_date_from_unix_seconds(unix_seconds_now());
-            let mut runner = release_prep::ProcessRunner::new(repository_root.clone());
+            let mut runner = command_runner::ProcessRunner::new(repository_root.clone());
             let version = release_prep::prepare_release(
                 &repository_root,
                 &request,
@@ -111,10 +126,17 @@ fn run(arguments: &[String]) -> Result<(), XtaskError> {
             println!("{version}");
             Ok(())
         }
-        Invocation::ReleaseNotes { version } => {
+        Invocation::PrintReleaseNotes { version } => {
             let changelog = std::fs::read_to_string(repository_root().join("CHANGELOG.md"))?;
             let notes = changelog::release_notes(&changelog, &version)?;
             println!("{notes}");
+            Ok(())
+        }
+        Invocation::VerifyReleaseTag { tag } => {
+            let repository_root = repository_root();
+            let mut runner = command_runner::ProcessRunner::new(repository_root.clone());
+            let version = release_verify::verify_release(&repository_root, &tag, &mut runner)?;
+            println!("{version}");
             Ok(())
         }
     }
@@ -146,7 +168,7 @@ mod tests {
         let invocation = parse_invocation(&arguments(&["release-prep", "patch"])).unwrap();
         assert_eq!(
             invocation,
-            Invocation::ReleasePrep {
+            Invocation::PrepareRelease {
                 request: VersionRequest::Level(BumpLevel::Patch),
                 is_dry_run: false
             }
@@ -159,7 +181,7 @@ mod tests {
             parse_invocation(&arguments(&["release-prep", "0.2.0", "--dry-run"])).unwrap();
         assert_eq!(
             invocation,
-            Invocation::ReleasePrep {
+            Invocation::PrepareRelease {
                 request: VersionRequest::Exact(Version::new(0, 2, 0)),
                 is_dry_run: true,
             }
@@ -171,7 +193,7 @@ mod tests {
         let invocation = parse_invocation(&arguments(&["release-notes", "0.1.1"])).unwrap();
         assert_eq!(
             invocation,
-            Invocation::ReleaseNotes {
+            Invocation::PrintReleaseNotes {
                 version: "0.1.1".to_string()
             }
         );
@@ -213,6 +235,46 @@ mod tests {
     fn rejects_release_prep_with_an_unknown_flag() {
         assert!(matches!(
             parse_invocation(&arguments(&["release-prep", "patch", "--force"])),
+            Err(XtaskError::Usage(_))
+        ));
+    }
+
+    #[test]
+    fn parses_release_verify() {
+        let invocation = parse_invocation(&arguments(&["release-verify", "v0.1.2"])).unwrap();
+        assert_eq!(
+            invocation,
+            Invocation::VerifyReleaseTag {
+                tag: "v0.1.2".to_string()
+            }
+        );
+    }
+
+    #[test]
+    fn parses_release_verify_without_validating_the_tag_shape() {
+        // Parsing only splits the command line; `verify_release` is the one
+        // that validates the tag shape. A junk tag string still parses here.
+        let invocation = parse_invocation(&arguments(&["release-verify", "not-a-tag"])).unwrap();
+        assert_eq!(
+            invocation,
+            Invocation::VerifyReleaseTag {
+                tag: "not-a-tag".to_string()
+            }
+        );
+    }
+
+    #[test]
+    fn rejects_release_verify_without_a_tag() {
+        assert!(matches!(
+            parse_invocation(&arguments(&["release-verify"])),
+            Err(XtaskError::Usage(_))
+        ));
+    }
+
+    #[test]
+    fn rejects_release_verify_with_an_extra_argument() {
+        assert!(matches!(
+            parse_invocation(&arguments(&["release-verify", "v0.1.2", "extra"])),
             Err(XtaskError::Usage(_))
         ));
     }

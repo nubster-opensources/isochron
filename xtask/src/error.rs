@@ -57,6 +57,35 @@ pub(crate) enum XtaskError {
         /// The exit status, formatted.
         status: String,
     },
+    /// A release tag is not of the form `vX.Y.Z`.
+    InvalidReleaseTag {
+        /// The tag that was pushed.
+        tag: String,
+    },
+    /// The tag version and the packaged version disagree.
+    TagVersionMismatch {
+        /// The version claimed by the tag.
+        tag_version: String,
+        /// The version cargo would publish.
+        package_version: String,
+    },
+    /// The output of `cargo pkgid` carries no readable version.
+    UnreadablePackageId {
+        /// The output that could not be read, verbatim.
+        output: String,
+    },
+    /// The tag does not resolve to the commit that is checked out.
+    TagNotCheckedOut {
+        /// The commit the tag points at.
+        tag_commit: String,
+        /// The commit that is checked out.
+        head_commit: String,
+    },
+    /// The tagged commit is not on the first-parent line of `origin/main`.
+    CommitNotOnMainLine {
+        /// The commit the tag points at.
+        commit: String,
+    },
     /// An underlying input and output error.
     Io(std::io::Error),
     /// The command line arguments could not be interpreted.
@@ -117,6 +146,32 @@ impl std::fmt::Display for XtaskError {
             Self::CommandFailed { program, status } => write!(
                 formatter,
                 "Command `{program}` failed with exit status {status}; check its output above for details"
+            ),
+            Self::InvalidReleaseTag { tag } => write!(
+                formatter,
+                "Release tag `{tag}` is not of the form `vX.Y.Z` with no prerelease or build metadata; delete the tag and push a corrected one"
+            ),
+            Self::TagVersionMismatch {
+                tag_version,
+                package_version,
+            } => write!(
+                formatter,
+                "Tag version `{tag_version}` does not match the packaged version `{package_version}`; the tag was pushed for a version this commit does not carry"
+            ),
+            Self::UnreadablePackageId { output } => write!(
+                formatter,
+                "Could not read a version from the `cargo pkgid` output `{output}`"
+            ),
+            Self::TagNotCheckedOut {
+                tag_commit,
+                head_commit,
+            } => write!(
+                formatter,
+                "The tag points at commit `{tag_commit}` but commit `{head_commit}` is checked out; release from the tagged commit only"
+            ),
+            Self::CommitNotOnMainLine { commit } => write!(
+                formatter,
+                "Commit `{commit}` is not on the first-parent line of `origin/main`; only a commit that `main` itself points at may be released"
             ),
             Self::Io(error) => write!(formatter, "input and output error: {error}"),
             Self::Usage(message) => write!(formatter, "{message}"),
