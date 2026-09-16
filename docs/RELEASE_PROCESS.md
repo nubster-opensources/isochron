@@ -106,7 +106,9 @@ in this order.
 5. that commit is on the first-parent line of `origin/main`, that is one of
    the states `main` itself has pointed at. A commit from inside a merged
    branch is an ancestor of `main` but was never validated as `main`, and is
-   refused.
+   refused. That line separates those states from branch commits only because
+   the repository lands every pull request as a merge commit, a property
+   recorded in [`GOVERNANCE.md`](GOVERNANCE.md).
 
 The manual dispatch of this workflow runs `verify` alone, gate and packaging
 dry run included. It can never publish.
