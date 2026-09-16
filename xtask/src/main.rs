@@ -235,4 +235,44 @@ mod tests {
             Err(XtaskError::Usage(_))
         ));
     }
+
+    #[test]
+    fn parses_release_verify() {
+        let invocation = parse_invocation(&arguments(&["release-verify", "v0.1.2"])).unwrap();
+        assert_eq!(
+            invocation,
+            Invocation::ReleaseVerify {
+                tag: "v0.1.2".to_string()
+            }
+        );
+    }
+
+    #[test]
+    fn parses_release_verify_without_validating_the_tag_shape() {
+        // Parsing only splits the command line; `verify_release` is the one
+        // that validates the tag shape. A junk tag string still parses here.
+        let invocation = parse_invocation(&arguments(&["release-verify", "not-a-tag"])).unwrap();
+        assert_eq!(
+            invocation,
+            Invocation::ReleaseVerify {
+                tag: "not-a-tag".to_string()
+            }
+        );
+    }
+
+    #[test]
+    fn rejects_release_verify_without_a_tag() {
+        assert!(matches!(
+            parse_invocation(&arguments(&["release-verify"])),
+            Err(XtaskError::Usage(_))
+        ));
+    }
+
+    #[test]
+    fn rejects_release_verify_with_an_extra_argument() {
+        assert!(matches!(
+            parse_invocation(&arguments(&["release-verify", "v0.1.2", "extra"])),
+            Err(XtaskError::Usage(_))
+        ));
+    }
 }
