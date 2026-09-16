@@ -3,9 +3,11 @@
 
 mod changelog;
 mod civil_date;
+mod command_runner;
 mod error;
 mod manifest;
 mod release_prep;
+mod release_verify;
 mod version;
 
 use crate::error::XtaskError;
@@ -26,12 +28,18 @@ pub(crate) enum Invocation {
         /// The version whose release notes body to print.
         version: String,
     },
+    /// Check that a pushed release tag may be published, and print its version.
+    ReleaseVerify {
+        /// The tag as pushed, `vX.Y.Z`.
+        tag: String,
+    },
 }
 
 /// Usage text listing every subcommand, shown when the command line cannot be interpreted.
 const USAGE: &str = "Usage:\n  \
 cargo xtask release-prep <patch|minor|major|x.y.z> [--dry-run]\n  \
-cargo xtask release-notes <version>";
+cargo xtask release-notes <version>\n  \
+cargo xtask release-verify <vX.Y.Z>";
 
 /// Parses the process command line arguments, excluding the program name, into an [`Invocation`].
 pub(crate) fn parse_invocation(arguments: &[String]) -> Result<Invocation, XtaskError> {
@@ -65,6 +73,10 @@ pub(crate) fn parse_invocation(arguments: &[String]) -> Result<Invocation, Xtask
                 return Err(usage());
             }
             Ok(Invocation::ReleaseNotes { version })
+        }
+        "release-verify" => {
+            let _ = &mut arguments;
+            todo!("parse the release-verify invocation")
         }
         _ => Err(usage()),
     }
@@ -100,7 +112,7 @@ fn run(arguments: &[String]) -> Result<(), XtaskError> {
         } => {
             let repository_root = repository_root();
             let date = civil_date::civil_date_from_unix_seconds(unix_seconds_now());
-            let mut runner = release_prep::ProcessRunner::new(repository_root.clone());
+            let mut runner = command_runner::ProcessRunner::new(repository_root.clone());
             let version = release_prep::prepare_release(
                 &repository_root,
                 &request,
@@ -115,6 +127,13 @@ fn run(arguments: &[String]) -> Result<(), XtaskError> {
             let changelog = std::fs::read_to_string(repository_root().join("CHANGELOG.md"))?;
             let notes = changelog::release_notes(&changelog, &version)?;
             println!("{notes}");
+            Ok(())
+        }
+        Invocation::ReleaseVerify { tag } => {
+            let repository_root = repository_root();
+            let mut runner = command_runner::ProcessRunner::new(repository_root.clone());
+            let version = release_verify::verify_release(&repository_root, &tag, &mut runner)?;
+            println!("{version}");
             Ok(())
         }
     }
