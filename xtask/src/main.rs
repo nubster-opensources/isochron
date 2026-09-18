@@ -8,6 +8,7 @@ mod error;
 mod manifest;
 mod release_prep;
 mod release_verify;
+mod semver_check;
 mod version;
 
 use crate::error::XtaskError;
@@ -28,6 +29,8 @@ pub(crate) enum Invocation {
         /// The version whose release notes body to print.
         version: String,
     },
+    /// Compare the public API with the latest published release under the declared release type.
+    CheckPublicApi,
     /// Check that a pushed release tag may be published, and print its version.
     VerifyReleaseTag {
         /// The tag as pushed, `vX.Y.Z`.
@@ -39,7 +42,8 @@ pub(crate) enum Invocation {
 const USAGE: &str = "Usage:\n  \
 cargo xtask release-prep <patch|minor|major|x.y.z> [--dry-run]\n  \
 cargo xtask release-notes <version>\n  \
-cargo xtask release-verify <vX.Y.Z>";
+cargo xtask release-verify <vX.Y.Z>\n  \
+cargo xtask semver-check";
 
 /// Parses the process command line arguments, excluding the program name, into an [`Invocation`].
 pub(crate) fn parse_invocation(arguments: &[String]) -> Result<Invocation, XtaskError> {
@@ -73,6 +77,12 @@ pub(crate) fn parse_invocation(arguments: &[String]) -> Result<Invocation, Xtask
                 return Err(usage());
             }
             Ok(Invocation::PrintReleaseNotes { version })
+        }
+        "semver-check" => {
+            if arguments.next().is_some() {
+                return Err(usage());
+            }
+            Ok(Invocation::CheckPublicApi)
         }
         "release-verify" => {
             let tag = arguments.next().ok_or_else(usage)?.clone();
@@ -131,6 +141,11 @@ fn run(arguments: &[String]) -> Result<(), XtaskError> {
             let notes = changelog::release_notes(&changelog, &version)?;
             println!("{notes}");
             Ok(())
+        }
+        Invocation::CheckPublicApi => {
+            let repository_root = repository_root();
+            let mut runner = command_runner::ProcessRunner::new(repository_root.clone());
+            semver_check::check_public_api(&repository_root, &mut runner)
         }
         Invocation::VerifyReleaseTag { tag } => {
             let repository_root = repository_root();
@@ -275,6 +290,20 @@ mod tests {
     fn rejects_release_verify_with_an_extra_argument() {
         assert!(matches!(
             parse_invocation(&arguments(&["release-verify", "v0.1.2", "extra"])),
+            Err(XtaskError::Usage(_))
+        ));
+    }
+
+    #[test]
+    fn parses_semver_check() {
+        let invocation = parse_invocation(&arguments(&["semver-check"])).unwrap();
+        assert_eq!(invocation, Invocation::CheckPublicApi);
+    }
+
+    #[test]
+    fn rejects_semver_check_with_an_extra_argument() {
+        assert!(matches!(
+            parse_invocation(&arguments(&["semver-check", "minor"])),
             Err(XtaskError::Usage(_))
         ));
     }

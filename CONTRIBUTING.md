@@ -37,7 +37,17 @@ cargo clippy --all-targets --all-features -- -D warnings
 
 # Run tests
 cargo test --all-features
+
+# Compare the public API with the latest published release, as CI does.
+# The tool needs a recent compiler, while rust-toolchain.toml pins the MSRV.
+RUSTUP_TOOLCHAIN=stable cargo install cargo-semver-checks --locked --version 0.50.0
+RUSTUP_TOOLCHAIN=stable cargo xtask semver-check
 ```
+
+A breaking change is allowed before `1.0`, but it must be declared: raise
+`next-release` under `[package.metadata.isochron]` in `Cargo.toml` and describe
+the migration in `CHANGELOG.md`, in the same pull request. See
+[`docs/RELEASE_PROCESS.md`](docs/RELEASE_PROCESS.md).
 
 ## Contributor License Agreement
 

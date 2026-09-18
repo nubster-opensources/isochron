@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- A `SemVer` status check comparing the public API with the latest release published on crates.io, and `cargo xtask semver-check` to reproduce it. The release type it applies is declared in `Cargo.toml` under `[package.metadata.isochron] next-release`, so an intentional breaking change requires a reviewed diff rather than passing unnoticed. `cargo xtask release-prep` refuses to release below the declared level and resets the declaration once the release is prepared. (#46)
+
 ## [0.1.2] - 2026-09-16
 
 ### Added

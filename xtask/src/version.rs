@@ -19,6 +19,11 @@ impl Version {
             patch,
         }
     }
+
+    /// Returns the major, minor and patch components, in that order.
+    pub(crate) const fn components(&self) -> (u64, u64, u64) {
+        (self.major, self.minor, self.patch)
+    }
 }
 
 /// Parses one dot separated component of a version: digits only, and no
@@ -63,8 +68,8 @@ impl std::fmt::Display for Version {
     }
 }
 
-/// A semantic version component to increment.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// A semantic version component to increment, ordered from the smallest to the largest bump.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum BumpLevel {
     /// Increment the patch component.
     Patch,
@@ -72,6 +77,18 @@ pub(crate) enum BumpLevel {
     Minor,
     /// Increment the major component and reset the minor and patch components.
     Major,
+}
+
+impl BumpLevel {
+    /// Returns the keyword that names this level, the spelling used on the command line
+    /// and in the manifest declaration.
+    pub(crate) const fn as_str(self) -> &'static str {
+        match self {
+            Self::Patch => "patch",
+            Self::Minor => "minor",
+            Self::Major => "major",
+        }
+    }
 }
 
 /// A requested next version: either a relative bump or an exact target.
@@ -246,6 +263,12 @@ mod tests {
             .resolve(&current)
             .unwrap_err();
         assert!(matches!(error, XtaskError::VersionNotGreater { .. }));
+    }
+
+    #[test]
+    fn bump_levels_are_ordered_from_patch_to_major() {
+        assert!(BumpLevel::Patch < BumpLevel::Minor);
+        assert!(BumpLevel::Minor < BumpLevel::Major);
     }
 
     #[test]
