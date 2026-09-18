@@ -43,6 +43,20 @@ pub(crate) enum XtaskError {
     },
     /// The manifest has no `version` key under `[package]`.
     ManifestVersionNotFound,
+    /// The manifest has no `next-release` key under `[package.metadata.isochron]`.
+    NextReleaseNotFound,
+    /// The declared `next-release` value is not one of `patch`, `minor` or `major`.
+    InvalidNextRelease {
+        /// The declared value, verbatim.
+        value: String,
+    },
+    /// The requested release bumps less than the manifest declares for the next release.
+    BumpBelowDeclaredRelease {
+        /// The declared next release level, formatted.
+        declared: String,
+        /// The level the requested version would actually bump, formatted.
+        requested: String,
+    },
     /// The current branch is not `main`.
     NotOnMain {
         /// The branch that was checked out instead of `main`.
@@ -134,6 +148,21 @@ impl std::fmt::Display for XtaskError {
             Self::ManifestVersionNotFound => write!(
                 formatter,
                 "Cargo.toml has no `version` key under `[package]`; add one before running this command"
+            ),
+            Self::NextReleaseNotFound => write!(
+                formatter,
+                "Cargo.toml has no `next-release` key under `[package.metadata.isochron]`; declare `next-release = \"patch\"` there"
+            ),
+            Self::InvalidNextRelease { value } => write!(
+                formatter,
+                "`{value}` is not a valid `next-release` declaration; expected `patch`, `minor` or `major`"
+            ),
+            Self::BumpBelowDeclaredRelease {
+                declared,
+                requested,
+            } => write!(
+                formatter,
+                "The manifest declares a `{declared}` next release but the requested version is only a `{requested}` bump; request at least a `{declared}` release"
             ),
             Self::NotOnMain { branch } => write!(
                 formatter,

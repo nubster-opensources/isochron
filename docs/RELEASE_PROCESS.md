@@ -117,6 +117,52 @@ Tagging is deliberately a manual step so the human reviewing the PR is also
 the one who triggers the publish, with full awareness of what is about to
 leave the workshop.
 
+## Public API comparison
+
+Every pull request runs the `SemVer` check, which compares the public API with
+the latest release published on crates.io. The comparison applies the release
+type declared in `Cargo.toml`:
+
+```toml
+[package.metadata.isochron]
+next-release = "patch"
+```
+
+- `patch`, the resting value, lets `cargo semver-checks` infer the release type
+  from the version in `Cargo.toml`. On `main` that version is the last released
+  one, so any breaking change turns the check red.
+- `minor` or `major` is passed explicitly and permits the corresponding breaks
+  until the next release. Raising it is a reviewed diff, in the pull request
+  that introduces the break. Per [SEMVER_POLICY.md](SEMVER_POLICY.md), a `0.x`
+  minor release may break the API.
+
+The declaration names the version component that moves, the same vocabulary as
+`cargo xtask release-prep`. The tool's `--release-type` names a semver level
+instead, and below `1.0` the two differ: Cargo gives the minor component the
+role of the major one. The xtask translates accordingly, so while the version
+starts with `0.`, a `minor` declaration asks the tool for `major`. Declaring
+`major` before `1.0` means the next release is `1.0.0`.
+- Every break detected this way is announced in `CHANGELOG.md` under `Changed`
+  or `Removed`, with its migration note, in the same pull request.
+
+`cargo xtask release-prep` reads the same declaration. It refuses a release
+that bumps less than what is declared, before creating any branch, and its
+release commit resets the declaration to `patch`: the release branch is then
+checked against its own bumped version, and the next cycle starts from the
+strictest setting.
+
+To reproduce the check locally:
+
+```sh
+RUSTUP_TOOLCHAIN=stable cargo install cargo-semver-checks --locked --version 0.50.0
+RUSTUP_TOOLCHAIN=stable cargo xtask semver-check
+```
+
+`RUSTUP_TOOLCHAIN` is needed because `rust-toolchain.toml` pins the MSRV for
+the whole repository, while the tool reads rustdoc JSON and requires a recent
+compiler. The CI job sets the same override, and it changes nothing for users:
+the crate itself is still built and tested at its MSRV.
+
 ## What release preparation does NOT do
 
 - It does not publish to crates.io. The tag does, via `release.yml`.
@@ -163,3 +209,13 @@ leave the workshop.
   merge commit on `main` instead.
 - **The `publish` job is waiting**: it needs the `crates-io` environment
   approval. Approve it from the workflow run page once `verify` is green.
+- **`The manifest declares a minor next release but the requested version is
+  only a patch bump`**: the declaration permits breaking changes that a patch
+  release would hide. Release at the declared level, or lower the declaration
+  in a pull request if no break actually landed.
+- **`Cargo.toml has no next-release key under [package.metadata.isochron]`**:
+  the declaration was removed; add it back with `next-release = "patch"`.
+- **The `SemVer` check is red on a pull request**: either the change is an
+  accidental break and belongs in a fix, or it is intentional and the pull
+  request must raise `next-release` and document the migration in
+  `CHANGELOG.md`.

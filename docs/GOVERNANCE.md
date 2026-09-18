@@ -69,8 +69,8 @@ request. Contribution guidelines live in
   `team / ai-review` status check, is required and runs on every pull request.
 - These status checks must pass before a pull request can merge, under exactly
   these names: `test (ubuntu-latest)`, `test (macos-latest)`,
-  `test (windows-latest)`, `msrv`, `deny`, `team / ai-review` and
-  `Documentation`.
+  `test (windows-latest)`, `msrv`, `deny`, `team / ai-review`,
+  `Documentation` and `SemVer`.
 - Formatting and linting have no check of their own. `cargo fmt --all --check`
   and `cargo clippy --workspace --all-targets --all-features -- -D warnings`
   run inside the `test` job, so a formatting slip turns `test` red rather than
@@ -116,6 +116,11 @@ taste. See [`RELEASE_PROCESS.md`](RELEASE_PROCESS.md).
 - Semver classification of a change (major, minor, patch) is proposed by the
   author in the pull request and adjudicated by the BDFL when the impact is
   non-obvious.
+- The `SemVer` status check compares the public API with the latest release
+  published on crates.io and applies the release type declared in
+  `[package.metadata.isochron] next-release`. A breaking change therefore
+  requires a reviewed diff raising that declaration, in the pull request that
+  introduces it. See [`RELEASE_PROCESS.md`](RELEASE_PROCESS.md).
 
 ## Changes to this document
 
