@@ -135,6 +135,13 @@ next-release = "patch"
   until the next release. Raising it is a reviewed diff, in the pull request
   that introduces the break. Per [SEMVER_POLICY.md](SEMVER_POLICY.md), a `0.x`
   minor release may break the API.
+
+The declaration names the version component that moves, the same vocabulary as
+`cargo xtask release-prep`. The tool's `--release-type` names a semver level
+instead, and below `1.0` the two differ: Cargo gives the minor component the
+role of the major one. The xtask translates accordingly, so while the version
+starts with `0.`, a `minor` declaration asks the tool for `major`. Declaring
+`major` before `1.0` means the next release is `1.0.0`.
 - Every break detected this way is announced in `CHANGELOG.md` under `Changed`
   or `Removed`, with its migration note, in the same pull request.
 
