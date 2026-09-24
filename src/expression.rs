@@ -475,4 +475,88 @@ mod tests {
             );
         }
     }
+
+    // Issue #41: equality and hashing compare the matching instants, never the
+    // spelling of the expression that produced them.
+
+    /// Expressions that all impose the same instants as `0 0 * * *`.
+    const EQUIVALENT_TO_DAILY_MIDNIGHT: [&str; 6] = [
+        "0 0 0 * * *",
+        "0 0 */1 * *",
+        "0 0 1-31 * *",
+        "0 0 * * 0-6",
+        "0 0 13 * 0-6",
+        "@daily",
+    ];
+
+    #[test]
+    fn eq_ignores_implicit_versus_explicit_zero_seconds() {
+        let five_fields = CronSchedule::parse("0 0 * * *").expect("valid");
+        let six_fields = CronSchedule::parse("0 0 0 * * *").expect("valid");
+        assert_eq!(five_fields, six_fields);
+    }
+
+    #[test]
+    fn eq_distinguishes_a_real_seconds_field() {
+        let midnight = CronSchedule::parse("0 0 * * *").expect("valid");
+        let half_past = CronSchedule::parse("30 0 0 * * *").expect("valid");
+        assert_ne!(midnight, half_past);
+    }
+
+    #[test]
+    fn eq_ignores_a_day_restriction_that_restricts_nothing() {
+        let daily = CronSchedule::parse("0 0 * * *").expect("valid");
+        for expression in EQUIVALENT_TO_DAILY_MIDNIGHT {
+            let equivalent = CronSchedule::parse(expression).expect("valid");
+            assert_eq!(daily, equivalent, "{expression} should equal 0 0 * * *");
+        }
+    }
+
+    // The absorbing case above must not degrade into treating a full field as
+    // an absent one: with the day-of-week left as a bare star there is no union
+    // to absorb, and day 13 still restricts.
+    #[test]
+    fn eq_keeps_a_day_of_month_that_alone_restricts() {
+        let daily = CronSchedule::parse("0 0 * * *").expect("valid");
+        let thirteenth = CronSchedule::parse("0 0 13 * *").expect("valid");
+        assert_ne!(daily, thirteenth);
+    }
+
+    #[test]
+    fn eq_keeps_a_union_of_two_partial_fields() {
+        let union = CronSchedule::parse("0 0 1 * 1").expect("valid");
+        let day_only = CronSchedule::parse("0 0 1 * *").expect("valid");
+        assert_ne!(union, day_only);
+    }
+
+    #[test]
+    fn hash_deduplicates_semantically_equal_schedules() {
+        use std::collections::HashSet;
+        let mut set = HashSet::new();
+        set.insert(CronSchedule::parse("0 0 * * *").expect("valid"));
+        for expression in EQUIVALENT_TO_DAILY_MIDNIGHT {
+            set.insert(CronSchedule::parse(expression).expect("valid"));
+        }
+        assert_eq!(set.len(), 1);
+    }
+
+    #[test]
+    fn hash_keeps_distinct_schedules_apart() {
+        use std::collections::HashSet;
+        let distinct = ["0 0 * * *", "30 0 0 * * *", "0 0 13 * *", "0 0 1 * 1"];
+        let set: HashSet<CronSchedule> = distinct
+            .iter()
+            .map(|expression| CronSchedule::parse(expression).expect("valid"))
+            .collect();
+        assert_eq!(set.len(), distinct.len());
+    }
+
+    // Equality is structural on the day filter, not extensional on the
+    // occurrences: two schedules that never fire stay distinct.
+    #[test]
+    fn eq_does_not_decide_extensional_equivalence() {
+        let never_thirty = CronSchedule::parse("0 0 30 2 *").expect("valid");
+        let never_thirty_one = CronSchedule::parse("0 0 31 2 *").expect("valid");
+        assert_ne!(never_thirty, never_thirty_one);
+    }
 }

@@ -248,4 +248,60 @@ mod tests {
             "at 09:00 on Monday, Tuesday, Wednesday, Thursday and Friday"
         );
     }
+
+    // Issue #41: the description reads the effective day filter, so a
+    // restriction that restricts nothing is no longer enumerated.
+
+    #[test]
+    fn step_covering_every_day_of_the_month_reads_as_every_day() {
+        assert_eq!(describe("0 0 */1 * *"), "at 00:00 every day");
+    }
+
+    #[test]
+    fn range_covering_every_day_of_the_month_reads_as_every_day() {
+        assert_eq!(describe("0 0 1-31 * *"), "at 00:00 every day");
+    }
+
+    #[test]
+    fn union_absorbed_by_a_full_weekday_reads_as_every_day() {
+        assert_eq!(describe("0 0 13 * 0-6"), "at 00:00 every day");
+    }
+
+    #[test]
+    fn a_day_of_month_that_alone_restricts_is_still_enumerated() {
+        assert_eq!(describe("0 0 13 * *"), "at 00:00 on day 13 of the month");
+    }
+
+    #[test]
+    fn a_real_union_is_still_enumerated() {
+        assert_eq!(
+            describe("0 0 1 * 1"),
+            "at 00:00 on day 1 of the month or on Monday"
+        );
+    }
+
+    // Equal schedules render the same text. Without this the crate would hold
+    // two notions of a restricted day, one that compares and one that displays.
+    #[test]
+    fn equal_schedules_describe_identically() {
+        let equivalent = [
+            "0 0 * * *",
+            "0 0 0 * * *",
+            "0 0 */1 * *",
+            "0 0 1-31 * *",
+            "0 0 * * 0-6",
+            "0 0 13 * 0-6",
+            "@daily",
+        ];
+        for expression in equivalent {
+            let left = CronSchedule::parse("0 0 * * *").expect("valid");
+            let right = CronSchedule::parse(expression).expect("valid");
+            assert_eq!(left, right, "{expression} should equal 0 0 * * *");
+            assert_eq!(
+                left.describe(),
+                right.describe(),
+                "{expression} should describe like 0 0 * * *"
+            );
+        }
+    }
 }
