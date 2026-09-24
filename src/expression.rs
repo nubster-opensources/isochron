@@ -550,6 +550,28 @@ mod tests {
         assert_eq!(set.len(), distinct.len());
     }
 
+    // Every compared component must be able to tell two schedules apart on its
+    // own, otherwise one of them could silently drop out of the comparison.
+    // Each expression below differs from the reference in exactly one.
+    #[test]
+    fn eq_distinguishes_every_compared_component() {
+        let reference = CronSchedule::parse("0 0 1 1 1").expect("valid");
+        let differing = [
+            ("second", "30 0 0 1 1 1"),
+            ("minute", "1 0 1 1 1"),
+            ("hour", "0 1 1 1 1"),
+            ("month", "0 0 1 2 1"),
+            ("day filter", "0 0 2 1 1"),
+        ];
+        for (component, expression) in differing {
+            let other = CronSchedule::parse(expression).expect("valid");
+            assert_ne!(
+                reference, other,
+                "{component} should tell 0 0 1 1 1 from {expression}"
+            );
+        }
+    }
+
     // Equality is structural on the day filter, not extensional on the
     // occurrences: two schedules that never fire stay distinct.
     #[test]
