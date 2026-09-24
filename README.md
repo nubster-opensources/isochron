@@ -92,6 +92,14 @@ day-of-week matches. Only the literal `*` disables a field's restriction: a rang
 like `1-31` still counts as restricted. This differs from Quartz which requires a
 `?` placeholder and uses AND logic.
 
+**Equality.** Two schedules are equal when they impose the same instants, not
+when they are written the same way. A five-field expression equals its six-field
+form with seconds pinned to zero, and a restriction accepting every day equals a
+bare `*`, so `0 0 * * *`, `0 0 0 * * *`, `0 0 1-31 * *` and `0 0 13 * 0-6` are
+one key in a `HashSet`, not four. The comparison is structural on the effective
+day filter: it does not decide general equivalence, and two schedules that never
+fire, such as `0 0 30 2 *` and `0 0 31 2 *`, stay distinct.
+
 ## Documentation
 
 - API reference on [docs.rs](https://docs.rs/isochron).
