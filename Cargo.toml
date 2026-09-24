@@ -17,7 +17,7 @@ categories = ["date-and-time"]
 # permission for an intentional breaking change, and `cargo xtask release-prep` then refuses
 # to bump less than what is declared here.
 [package.metadata.isochron]
-next-release = "patch"
+next-release = "minor"
 
 [package.metadata.docs.rs]
 all-features = true

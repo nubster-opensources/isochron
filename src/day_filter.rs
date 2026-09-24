@@ -1,7 +1,7 @@
 //! The effective day restriction of a schedule, reduced to the predicate it
 //! actually imposes.
 
-use time::OffsetDateTime;
+use time::{OffsetDateTime, UtcOffset};
 
 use crate::field::FieldSchedule;
 
@@ -38,8 +38,23 @@ impl DayFilter {
         day_of_month: Option<FieldSchedule>,
         day_of_week: Option<FieldSchedule>,
     ) -> Self {
-        let _ = (day_of_month, day_of_week);
-        unimplemented!("day filter canonicalisation")
+        match (day_of_month, day_of_week) {
+            (None, None) => Self::EveryDay,
+            (Some(days), None) if days.is_full() => Self::EveryDay,
+            (Some(days), None) => Self::DayOfMonth(days),
+            (None, Some(days)) if days.is_full() => Self::EveryDay,
+            (None, Some(days)) => Self::DayOfWeek(days),
+            (Some(day_of_month), Some(day_of_week)) => {
+                if day_of_month.is_full() || day_of_week.is_full() {
+                    Self::EveryDay
+                } else {
+                    Self::Union {
+                        day_of_month,
+                        day_of_week,
+                    }
+                }
+            }
+        }
     }
 
     /// Whether `datetime` falls on a day this filter accepts.
@@ -47,8 +62,18 @@ impl DayFilter {
     /// The offset is normalised to UTC before the day is read, so the calendar
     /// day of the argument is not necessarily the day being judged.
     pub(crate) fn matches(self, datetime: OffsetDateTime) -> bool {
-        let _ = datetime;
-        unimplemented!("day filter matching")
+        let datetime = datetime.to_offset(UtcOffset::UTC);
+        let day = datetime.day();
+        let weekday = datetime.weekday().number_days_from_sunday();
+        match self {
+            Self::EveryDay => true,
+            Self::DayOfMonth(days) => days.contains(day),
+            Self::DayOfWeek(days) => days.contains(weekday),
+            Self::Union {
+                day_of_month,
+                day_of_week,
+            } => day_of_month.contains(day) || day_of_week.contains(weekday),
+        }
     }
 }
 
@@ -82,7 +107,10 @@ mod tests {
     #[test]
     fn partial_day_of_month_alone_is_kept() {
         let days = day_of_month("13");
-        assert_eq!(DayFilter::new(Some(days), None), DayFilter::DayOfMonth(days));
+        assert_eq!(
+            DayFilter::new(Some(days), None),
+            DayFilter::DayOfMonth(days)
+        );
     }
 
     #[test]

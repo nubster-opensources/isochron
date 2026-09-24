@@ -1,5 +1,6 @@
 //! Deterministic English description of a cron schedule.
 
+use crate::day_filter::DayFilter;
 use crate::expression::CronSchedule;
 
 const WEEKDAYS: [&str; 7] = [
@@ -95,22 +96,21 @@ fn time_clause(schedule: &CronSchedule) -> String {
 }
 
 fn day_clause(schedule: &CronSchedule) -> String {
-    match (schedule.dom_restricted, schedule.dow_restricted) {
-        (false, false) => "every day".to_owned(),
-        (true, false) => {
-            format!(
-                "on day {} of the month",
-                join_numbers(&schedule.day_of_month.values())
-            )
+    match schedule.days {
+        DayFilter::EveryDay => "every day".to_owned(),
+        DayFilter::DayOfMonth(days) => {
+            format!("on day {} of the month", join_numbers(&days.values()))
         }
-        (false, true) => format!(
-            "on {}",
-            join_named(&schedule.day_of_week.values(), &WEEKDAYS, 0)
-        ),
-        (true, true) => format!(
+        DayFilter::DayOfWeek(days) => {
+            format!("on {}", join_named(&days.values(), &WEEKDAYS, 0))
+        }
+        DayFilter::Union {
+            day_of_month,
+            day_of_week,
+        } => format!(
             "on day {} of the month or on {}",
-            join_numbers(&schedule.day_of_month.values()),
-            join_named(&schedule.day_of_week.values(), &WEEKDAYS, 0)
+            join_numbers(&day_of_month.values()),
+            join_named(&day_of_week.values(), &WEEKDAYS, 0)
         ),
     }
 }

@@ -48,7 +48,7 @@ impl CronSchedule {
                 candidate = start_of_next_month(candidate)?;
                 continue;
             }
-            if !self.day_matches(candidate) {
+            if !self.days.matches(candidate) {
                 candidate = start_of_next_day(candidate)?;
                 continue;
             }
@@ -100,7 +100,7 @@ impl CronSchedule {
                 candidate = end_of_prev_month(candidate, self.has_seconds)?;
                 continue;
             }
-            if !self.day_matches(candidate) {
+            if !self.days.matches(candidate) {
                 candidate = end_of_prev_day(candidate, self.has_seconds)?;
                 continue;
             }
