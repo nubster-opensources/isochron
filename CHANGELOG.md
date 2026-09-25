@@ -10,6 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - A `SemVer` status check comparing the public API with the latest release published on crates.io, and `cargo xtask semver-check` to reproduce it. The release type it applies is declared in `Cargo.toml` under `[package.metadata.isochron] next-release`, so an intentional breaking change requires a reviewed diff rather than passing unnoticed. `cargo xtask release-prep` refuses to release below the declared level and resets the declaration once the release is prepared. (#46)
 
+### Changed
+
+- `CronSchedule` equality and hashing now compare the instants a schedule imposes instead of the spelling of the expression that produced it. A five-field expression equals its six-field form with seconds pinned to zero, and a day restriction that accepts every day equals a bare `*`, so `0 0 * * *`, `0 0 0 * * *`, `0 0 */1 * *`, `0 0 1-31 * *` and `0 0 13 * 0-6` are now a single key in a `HashSet` or `HashMap` rather than five. Schedules that differ in the instants they produce, including a real seconds field and a genuine day-of-month or day-of-week restriction, stay distinct. The comparison is structural on the effective day filter and does not decide general equivalence: two schedules that never fire, such as `0 0 30 2 *` and `0 0 31 2 *`, remain distinct. (#41)
+- `describe()` reads the same effective day filter, so a day restriction that restricts nothing is no longer enumerated: `0 0 */1 * *`, `0 0 1-31 * *` and `0 0 13 * 0-6` now read `at 00:00 every day` instead of listing every day of the month or every weekday. Equal schedules therefore always render the same text. Matching is unaffected. (#41)
+
 ## [0.1.2] - 2026-09-16
 
 ### Added

@@ -1,5 +1,6 @@
 //! Deterministic English description of a cron schedule.
 
+use crate::day_filter::DayFilter;
 use crate::expression::CronSchedule;
 
 const WEEKDAYS: [&str; 7] = [
@@ -95,22 +96,21 @@ fn time_clause(schedule: &CronSchedule) -> String {
 }
 
 fn day_clause(schedule: &CronSchedule) -> String {
-    match (schedule.dom_restricted, schedule.dow_restricted) {
-        (false, false) => "every day".to_owned(),
-        (true, false) => {
-            format!(
-                "on day {} of the month",
-                join_numbers(&schedule.day_of_month.values())
-            )
+    match schedule.days {
+        DayFilter::EveryDay => "every day".to_owned(),
+        DayFilter::DayOfMonth(days) => {
+            format!("on day {} of the month", join_numbers(&days.values()))
         }
-        (false, true) => format!(
-            "on {}",
-            join_named(&schedule.day_of_week.values(), &WEEKDAYS, 0)
-        ),
-        (true, true) => format!(
+        DayFilter::DayOfWeek(days) => {
+            format!("on {}", join_named(&days.values(), &WEEKDAYS, 0))
+        }
+        DayFilter::Union {
+            day_of_month,
+            day_of_week,
+        } => format!(
             "on day {} of the month or on {}",
-            join_numbers(&schedule.day_of_month.values()),
-            join_named(&schedule.day_of_week.values(), &WEEKDAYS, 0)
+            join_numbers(&day_of_month.values()),
+            join_named(&day_of_week.values(), &WEEKDAYS, 0)
         ),
     }
 }
@@ -247,5 +247,61 @@ mod tests {
             describe("0 9 * * MON-FRI"),
             "at 09:00 on Monday, Tuesday, Wednesday, Thursday and Friday"
         );
+    }
+
+    // Issue #41: the description reads the effective day filter, so a
+    // restriction that restricts nothing is no longer enumerated.
+
+    #[test]
+    fn step_covering_every_day_of_the_month_reads_as_every_day() {
+        assert_eq!(describe("0 0 */1 * *"), "at 00:00 every day");
+    }
+
+    #[test]
+    fn range_covering_every_day_of_the_month_reads_as_every_day() {
+        assert_eq!(describe("0 0 1-31 * *"), "at 00:00 every day");
+    }
+
+    #[test]
+    fn union_absorbed_by_a_full_weekday_reads_as_every_day() {
+        assert_eq!(describe("0 0 13 * 0-6"), "at 00:00 every day");
+    }
+
+    #[test]
+    fn a_day_of_month_that_alone_restricts_is_still_enumerated() {
+        assert_eq!(describe("0 0 13 * *"), "at 00:00 on day 13 of the month");
+    }
+
+    #[test]
+    fn a_real_union_is_still_enumerated() {
+        assert_eq!(
+            describe("0 0 1 * 1"),
+            "at 00:00 on day 1 of the month or on Monday"
+        );
+    }
+
+    // Equal schedules render the same text. Without this the crate would hold
+    // two notions of a restricted day, one that compares and one that displays.
+    #[test]
+    fn equal_schedules_describe_identically() {
+        let equivalent = [
+            "0 0 * * *",
+            "0 0 0 * * *",
+            "0 0 */1 * *",
+            "0 0 1-31 * *",
+            "0 0 * * 0-6",
+            "0 0 13 * 0-6",
+            "@daily",
+        ];
+        for expression in equivalent {
+            let left = CronSchedule::parse("0 0 * * *").expect("valid");
+            let right = CronSchedule::parse(expression).expect("valid");
+            assert_eq!(left, right, "{expression} should equal 0 0 * * *");
+            assert_eq!(
+                left.describe(),
+                right.describe(),
+                "{expression} should describe like 0 0 * * *"
+            );
+        }
     }
 }

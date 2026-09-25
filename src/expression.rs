@@ -8,6 +8,7 @@ use time::{Duration, OffsetDateTime, UtcOffset};
 
 use crate::iter::Upcoming;
 
+use crate::day_filter::DayFilter;
 use crate::error::CronError;
 use crate::field::{self, FieldSchedule};
 
@@ -15,17 +16,29 @@ use crate::field::{self, FieldSchedule};
 ///
 /// Build one with [`CronSchedule::parse`]. Compute occurrences with
 /// [`CronSchedule::next_after`] and [`CronSchedule::prev_before`].
+///
+/// # Equality
+///
+/// Two schedules are equal when they impose the same instants: the same sets
+/// of seconds, minutes, hours and months, and the same effective day filter.
+/// How the expression was written never enters the comparison, so a five-field
+/// expression equals its six-field form with seconds pinned to zero, and a day
+/// restriction that accepts every day equals a bare `*`. `Hash` agrees with
+/// `Eq` on exactly those components.
+///
+/// The comparison is structural on that filter, not extensional on the
+/// occurrences: it does not decide whether two expressions fire at the same
+/// instants in general. Two schedules that never fire, such as `0 0 30 2 *`
+/// and `0 0 31 2 *`, remain distinct. Equality also says nothing about
+/// [`Display`](std::fmt::Display), which renders the expression as written.
 #[derive(Debug, Clone)]
 pub struct CronSchedule {
     pub(crate) second: FieldSchedule,
     pub(crate) minute: FieldSchedule,
     pub(crate) hour: FieldSchedule,
-    pub(crate) day_of_month: FieldSchedule,
     pub(crate) month: FieldSchedule,
-    pub(crate) day_of_week: FieldSchedule,
+    pub(crate) days: DayFilter,
     pub(crate) has_seconds: bool,
-    pub(crate) dom_restricted: bool,
-    pub(crate) dow_restricted: bool,
     normalized: String,
 }
 
@@ -34,12 +47,8 @@ impl PartialEq for CronSchedule {
         self.second == other.second
             && self.minute == other.minute
             && self.hour == other.hour
-            && self.day_of_month == other.day_of_month
             && self.month == other.month
-            && self.day_of_week == other.day_of_week
-            && self.has_seconds == other.has_seconds
-            && self.dom_restricted == other.dom_restricted
-            && self.dow_restricted == other.dow_restricted
+            && self.days == other.days
     }
 }
 
@@ -50,12 +59,8 @@ impl Hash for CronSchedule {
         self.second.hash(state);
         self.minute.hash(state);
         self.hour.hash(state);
-        self.day_of_month.hash(state);
         self.month.hash(state);
-        self.day_of_week.hash(state);
-        self.has_seconds.hash(state);
-        self.dom_restricted.hash(state);
-        self.dow_restricted.hash(state);
+        self.days.hash(state);
     }
 }
 
@@ -87,6 +92,11 @@ impl CronSchedule {
     /// EITHER field matches (OR logic). Only the literal `*` disables a field's
     /// restriction; a range such as `1-31` still counts as restricted. This
     /// differs from Quartz, which uses AND logic with an explicit `?` placeholder.
+    ///
+    /// A restriction that accepts every value imposes nothing, and under the
+    /// union a member accepting every day absorbs the other. So `0 0 1-31 * *`
+    /// and `0 0 13 * 0-6` match every day, exactly like `0 0 * * *`, and they
+    /// compare equal to it. See the type's `Equality` section.
     ///
     /// # Errors
     ///
@@ -124,12 +134,12 @@ impl CronSchedule {
             second,
             minute,
             hour,
-            day_of_month,
             month,
-            day_of_week,
+            days: DayFilter::new(
+                (dom_token != "*").then_some(day_of_month),
+                (weekday_token != "*").then_some(day_of_week),
+            ),
             has_seconds,
-            dom_restricted: dom_token != "*",
-            dow_restricted: weekday_token != "*",
             normalized,
         })
     }
@@ -235,21 +245,7 @@ impl CronSchedule {
             && self.minute.contains(datetime.minute())
             && self.hour.contains(datetime.hour())
             && self.month.contains(u8::from(datetime.month()))
-            && self.day_matches(datetime)
-    }
-
-    /// The day-of-month / day-of-week union rule.
-    pub(crate) fn day_matches(&self, datetime: OffsetDateTime) -> bool {
-        let dom = self.day_of_month.contains(datetime.day());
-        let dow = self
-            .day_of_week
-            .contains(datetime.weekday().number_days_from_sunday());
-        match (self.dom_restricted, self.dow_restricted) {
-            (true, true) => dom || dow,
-            (true, false) => dom,
-            (false, true) => dow,
-            (false, false) => true,
-        }
+            && self.days.matches(datetime)
     }
 }
 
@@ -281,6 +277,7 @@ impl fmt::Display for CronSchedule {
 #[cfg(test)]
 mod tests {
     use super::CronSchedule;
+    use crate::day_filter::DayFilter;
     use crate::error::CronError;
     use time::macros::datetime;
     use time::{Duration, OffsetDateTime, UtcOffset};
@@ -320,13 +317,15 @@ mod tests {
     }
 
     #[test]
-    fn restricted_flags_track_wildcards() {
-        let schedule = CronSchedule::parse("0 0 1 * 1").expect("valid");
-        assert!(schedule.dom_restricted);
-        assert!(schedule.dow_restricted);
+    fn parse_builds_the_effective_day_filter() {
+        let union = CronSchedule::parse("0 0 1 * 1").expect("valid");
+        assert!(matches!(union.days, DayFilter::Union { .. }));
         let loose = CronSchedule::parse("0 0 * * *").expect("valid");
-        assert!(!loose.dom_restricted);
-        assert!(!loose.dow_restricted);
+        assert_eq!(loose.days, DayFilter::EveryDay);
+        let day_only = CronSchedule::parse("0 0 1 * *").expect("valid");
+        assert!(matches!(day_only.days, DayFilter::DayOfMonth(_)));
+        let weekday_only = CronSchedule::parse("0 0 * * 1").expect("valid");
+        assert!(matches!(weekday_only.days, DayFilter::DayOfWeek(_)));
     }
 
     #[test]
@@ -474,5 +473,111 @@ mod tests {
                 "expression {expression} disagreed with next_after at {instant:?}"
             );
         }
+    }
+
+    // Issue #41: equality and hashing compare the matching instants, never the
+    // spelling of the expression that produced them.
+
+    /// Expressions that all impose the same instants as `0 0 * * *`.
+    const EQUIVALENT_TO_DAILY_MIDNIGHT: [&str; 6] = [
+        "0 0 0 * * *",
+        "0 0 */1 * *",
+        "0 0 1-31 * *",
+        "0 0 * * 0-6",
+        "0 0 13 * 0-6",
+        "@daily",
+    ];
+
+    #[test]
+    fn eq_ignores_implicit_versus_explicit_zero_seconds() {
+        let five_fields = CronSchedule::parse("0 0 * * *").expect("valid");
+        let six_fields = CronSchedule::parse("0 0 0 * * *").expect("valid");
+        assert_eq!(five_fields, six_fields);
+    }
+
+    #[test]
+    fn eq_distinguishes_a_real_seconds_field() {
+        let midnight = CronSchedule::parse("0 0 * * *").expect("valid");
+        let half_past = CronSchedule::parse("30 0 0 * * *").expect("valid");
+        assert_ne!(midnight, half_past);
+    }
+
+    #[test]
+    fn eq_ignores_a_day_restriction_that_restricts_nothing() {
+        let daily = CronSchedule::parse("0 0 * * *").expect("valid");
+        for expression in EQUIVALENT_TO_DAILY_MIDNIGHT {
+            let equivalent = CronSchedule::parse(expression).expect("valid");
+            assert_eq!(daily, equivalent, "{expression} should equal 0 0 * * *");
+        }
+    }
+
+    // The absorbing case above must not degrade into treating a full field as
+    // an absent one: with the day-of-week left as a bare star there is no union
+    // to absorb, and day 13 still restricts.
+    #[test]
+    fn eq_keeps_a_day_of_month_that_alone_restricts() {
+        let daily = CronSchedule::parse("0 0 * * *").expect("valid");
+        let thirteenth = CronSchedule::parse("0 0 13 * *").expect("valid");
+        assert_ne!(daily, thirteenth);
+    }
+
+    #[test]
+    fn eq_keeps_a_union_of_two_partial_fields() {
+        let union = CronSchedule::parse("0 0 1 * 1").expect("valid");
+        let day_only = CronSchedule::parse("0 0 1 * *").expect("valid");
+        assert_ne!(union, day_only);
+    }
+
+    #[test]
+    fn hash_deduplicates_semantically_equal_schedules() {
+        use std::collections::HashSet;
+        let mut set = HashSet::new();
+        set.insert(CronSchedule::parse("0 0 * * *").expect("valid"));
+        for expression in EQUIVALENT_TO_DAILY_MIDNIGHT {
+            set.insert(CronSchedule::parse(expression).expect("valid"));
+        }
+        assert_eq!(set.len(), 1);
+    }
+
+    #[test]
+    fn hash_keeps_distinct_schedules_apart() {
+        use std::collections::HashSet;
+        let distinct = ["0 0 * * *", "30 0 0 * * *", "0 0 13 * *", "0 0 1 * 1"];
+        let set: HashSet<CronSchedule> = distinct
+            .iter()
+            .map(|expression| CronSchedule::parse(expression).expect("valid"))
+            .collect();
+        assert_eq!(set.len(), distinct.len());
+    }
+
+    // Every compared component must be able to tell two schedules apart on its
+    // own, otherwise one of them could silently drop out of the comparison.
+    // Each expression below differs from the reference in exactly one.
+    #[test]
+    fn eq_distinguishes_every_compared_component() {
+        let reference = CronSchedule::parse("0 0 1 1 1").expect("valid");
+        let differing = [
+            ("second", "30 0 0 1 1 1"),
+            ("minute", "1 0 1 1 1"),
+            ("hour", "0 1 1 1 1"),
+            ("month", "0 0 1 2 1"),
+            ("day filter", "0 0 2 1 1"),
+        ];
+        for (component, expression) in differing {
+            let other = CronSchedule::parse(expression).expect("valid");
+            assert_ne!(
+                reference, other,
+                "{component} should tell 0 0 1 1 1 from {expression}"
+            );
+        }
+    }
+
+    // Equality is structural on the day filter, not extensional on the
+    // occurrences: two schedules that never fire stay distinct.
+    #[test]
+    fn eq_does_not_decide_extensional_equivalence() {
+        let never_thirty = CronSchedule::parse("0 0 30 2 *").expect("valid");
+        let never_thirty_one = CronSchedule::parse("0 0 31 2 *").expect("valid");
+        assert_ne!(never_thirty, never_thirty_one);
     }
 }

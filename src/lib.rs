@@ -14,6 +14,7 @@
 //! assert_eq!(next, datetime!(2026-01-02 00:00:00 UTC));
 //! ```
 
+mod day_filter;
 mod describe;
 mod error;
 mod expression;
