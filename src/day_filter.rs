@@ -75,6 +75,19 @@ impl DayFilter {
             } => day_of_month.contains(day) || day_of_week.contains(weekday),
         }
     }
+
+    /// The canonical day-of-month and day-of-week tokens, in field order.
+    ///
+    /// [`DayFilter::EveryDay`] yields two bare `*`, which is what makes the
+    /// rendering round-trip: a filter that imposes nothing renders as the only
+    /// spelling that imposes nothing, and a [`DayFilter::Union`] renders two
+    /// tokens neither of which is full, so it cannot fold on the way back.
+    // Red only: unused outside tests until `Display` is wired to it. The Green
+    // commit removes this attribute.
+    #[allow(dead_code)]
+    pub(crate) fn canonical_tokens(self) -> (String, String) {
+        todo!("canonical_tokens")
+    }
 }
 
 #[cfg(test)]
@@ -195,6 +208,67 @@ mod tests {
     // The offset is normalised before the day is read, so 01:00 at +02:00 is
     // the previous day in UTC and the calendar day of the argument is not the
     // day being judged.
+    // Two bare stars, and not `* 0-6`: a filter that imposes nothing must render
+    // as a spelling that imposes nothing, otherwise rendering then reparsing
+    // would not come back to the same filter.
+    #[test]
+    fn canonical_tokens_of_every_day_are_two_stars() {
+        assert_eq!(
+            DayFilter::EveryDay.canonical_tokens(),
+            ("*".to_owned(), "*".to_owned())
+        );
+    }
+
+    #[test]
+    fn canonical_tokens_of_a_day_of_month_leave_the_weekday_open() {
+        assert_eq!(
+            DayFilter::DayOfMonth(day_of_month("13")).canonical_tokens(),
+            ("13".to_owned(), "*".to_owned())
+        );
+    }
+
+    #[test]
+    fn canonical_tokens_of_a_day_of_week_leave_the_day_of_month_open() {
+        assert_eq!(
+            DayFilter::DayOfWeek(day_of_week("1-5")).canonical_tokens(),
+            ("*".to_owned(), "1-5".to_owned())
+        );
+    }
+
+    #[test]
+    fn canonical_tokens_of_a_union_render_both_in_field_order() {
+        let filter = DayFilter::Union {
+            day_of_month: day_of_month("1,15"),
+            day_of_week: day_of_week("1"),
+        };
+        assert_eq!(
+            filter.canonical_tokens(),
+            ("1,15".to_owned(), "1".to_owned())
+        );
+    }
+
+    // Rendering then rebuilding lands on the same filter for every variant. This
+    // is what keeps `Display` round-tripping through `parse`.
+    #[test]
+    fn canonical_tokens_rebuild_the_same_filter() {
+        for filter in [
+            DayFilter::EveryDay,
+            DayFilter::DayOfMonth(day_of_month("13")),
+            DayFilter::DayOfWeek(day_of_week("1-5")),
+            DayFilter::Union {
+                day_of_month: day_of_month("1,15"),
+                day_of_week: day_of_week("1"),
+            },
+        ] {
+            let (dom, dow) = filter.canonical_tokens();
+            let rebuilt = DayFilter::new(
+                (dom != "*").then(|| day_of_month(&dom)),
+                (dow != "*").then(|| day_of_week(&dow)),
+            );
+            assert_eq!(rebuilt, filter, "rendered as `{dom} {dow}`");
+        }
+    }
+
     #[test]
     fn matching_is_evaluated_in_utc() {
         let filter = DayFilter::DayOfMonth(day_of_month("15"));

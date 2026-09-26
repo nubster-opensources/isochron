@@ -110,6 +110,19 @@ impl FieldSchedule {
             max: kind.max,
         })
     }
+
+    /// The canonical cron token for this set: `*` when the field is full,
+    /// otherwise maximal ascending runs joined by commas. A run of one value is
+    /// written bare, a run of two or more as `a-b`.
+    ///
+    /// The token is a function of the set, never of the source spelling, so two
+    /// sets that are equal render identically.
+    // Red only: unused outside tests until `Display` is wired to it. The Green
+    // commit removes this attribute.
+    #[allow(dead_code)]
+    pub(crate) fn canonical_token(self) -> String {
+        todo!("canonical_token")
+    }
 }
 
 fn invalid(kind: FieldKind, token: &str, reason: &str) -> CronError {
@@ -254,7 +267,105 @@ fn parse_numeric(raw: &str, kind: FieldKind, part: &str) -> Result<u8, CronError
 
 #[cfg(test)]
 mod tests {
-    use super::{DAY_OF_WEEK, FieldSchedule, HOUR, MINUTE, MONTH};
+    use super::{DAY_OF_MONTH, DAY_OF_WEEK, FieldKind, FieldSchedule, HOUR, MINUTE, MONTH};
+
+    fn token(spec: &str, kind: FieldKind) -> String {
+        FieldSchedule::parse(spec, kind)
+            .expect("valid")
+            .canonical_token()
+    }
+
+    #[test]
+    fn canonical_token_renders_a_full_field_as_a_star() {
+        assert_eq!(token("*", MINUTE), "*");
+        assert_eq!(token("0-59", MINUTE), "*");
+        assert_eq!(token("1-31", DAY_OF_MONTH), "*");
+        assert_eq!(token("1-12", MONTH), "*");
+        assert_eq!(token("0-6", DAY_OF_WEEK), "*");
+    }
+
+    #[test]
+    fn canonical_token_renders_a_single_value_bare() {
+        assert_eq!(token("5", MINUTE), "5");
+    }
+
+    // A run of exactly two values is a range, not a two-entry list: one rule for
+    // every run length means one spelling per set.
+    #[test]
+    fn canonical_token_renders_a_pair_as_a_range() {
+        assert_eq!(token("5,6", MINUTE), "5-6");
+    }
+
+    #[test]
+    fn canonical_token_renders_a_long_run_as_a_range() {
+        assert_eq!(token("1-5", DAY_OF_WEEK), "1-5");
+    }
+
+    #[test]
+    fn canonical_token_renders_isolated_values_as_a_list() {
+        assert_eq!(token("0,15,30,45", MINUTE), "0,15,30,45");
+    }
+
+    #[test]
+    fn canonical_token_mixes_runs_and_isolated_values_in_ascending_order() {
+        assert_eq!(token("7,1-3", MINUTE), "1-3,7");
+        assert_eq!(token("20,1-3,10-11", MINUTE), "1-3,10-11,20");
+    }
+
+    #[test]
+    fn canonical_token_deduplicates_and_sorts_a_list() {
+        assert_eq!(token("30,0,30,15", MINUTE), "0,15,30");
+    }
+
+    // A step is one spelling of a set among several, so it never survives.
+    #[test]
+    fn canonical_token_expands_a_step() {
+        assert_eq!(token("*/15", MINUTE), "0,15,30,45");
+        assert_eq!(token("0-6/2", HOUR), "0,2,4,6");
+    }
+
+    #[test]
+    fn canonical_token_respects_a_non_zero_lower_bound() {
+        assert_eq!(token("1", DAY_OF_MONTH), "1");
+        assert_eq!(token("1-2", MONTH), "1-2");
+        assert_eq!(token("1,3", MONTH), "1,3");
+    }
+
+    // The bitset only ever holds 0 for Sunday, the alias having been folded at
+    // parse time, so the canonical token cannot spell it 7.
+    #[test]
+    fn canonical_token_folds_the_sunday_alias_onto_zero() {
+        assert_eq!(token("7", DAY_OF_WEEK), "0");
+        assert_eq!(token("5-7", DAY_OF_WEEK), "0,5-6");
+    }
+
+    #[test]
+    fn canonical_token_renders_names_as_numbers() {
+        assert_eq!(token("MON-FRI", DAY_OF_WEEK), "1-5");
+        assert_eq!(token("JAN", MONTH), "1");
+        assert_eq!(token("dec", MONTH), "12");
+    }
+
+    // The point of the whole design: the token depends on the set, never on how
+    // the set was written.
+    #[test]
+    fn canonical_token_is_a_function_of_the_set_alone() {
+        for (a, b, kind) in [
+            ("MON-FRI", "1-5", DAY_OF_WEEK),
+            ("7", "0", DAY_OF_WEEK),
+            ("5-7", "0,5,6", DAY_OF_WEEK),
+            ("*/15", "0,15,30,45", MINUTE),
+            ("1,1,2", "1-2", MINUTE),
+            ("3,2,1", "1-3", MINUTE),
+            ("0-59", "*", MINUTE),
+        ] {
+            assert_eq!(
+                token(a, kind),
+                token(b, kind),
+                "`{a}` and `{b}` name the same set"
+            );
+        }
+    }
     use crate::error::CronError;
 
     // Issue #3: Vixie-semantics for day-of-week ranges containing 7
