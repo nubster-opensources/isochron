@@ -29,8 +29,42 @@ use crate::field::{self, FieldSchedule};
 /// The comparison is structural on that filter, not extensional on the
 /// occurrences: it does not decide whether two expressions fire at the same
 /// instants in general. Two schedules that never fire, such as `0 0 30 2 *`
-/// and `0 0 31 2 *`, remain distinct. Equality also says nothing about
-/// [`Display`](std::fmt::Display), which renders the expression as written.
+/// and `0 0 31 2 *`, remain distinct.
+///
+/// # Display
+///
+/// [`Display`](std::fmt::Display) renders the canonical form, a function of the
+/// schedule and never of how it was written. Fields come in Vixie order,
+/// `second minute hour day-of-month month day-of-week`, separated by single
+/// spaces; the seconds field appears only when the seconds are not reduced to
+/// zero, so the usual output is a standard five-field expression. A field that
+/// accepts its whole range renders `*`; otherwise values render as maximal
+/// ascending runs joined by commas, a run of one value written bare and a run
+/// of two or more as `a-b`. Months and weekdays render as numbers, Sunday
+/// always as `0`.
+///
+/// Because this reads exactly the components equality compares, `a == b`
+/// implies `a.to_string() == b.to_string()` by construction. Round-tripping
+/// holds too: `CronSchedule::parse(s.to_string())` equals `s`, and rendering it
+/// again yields the same string.
+///
+/// The output is a stable format, meant for cache keys and persistence: it will
+/// not change except to correct a genuinely wrong rendering, and any change ships
+/// in a major version. That is a stricter promise than the one covering
+/// [`CronSchedule::describe`], whose English may change in a minor version.
+///
+/// ```
+/// use isochron::CronSchedule;
+///
+/// let written = CronSchedule::parse("  0   9 * * MON-FRI ").expect("valid");
+/// assert_eq!(written.to_string(), "0 9 * * 1-5");
+///
+/// // Spellings that impose the same instants render identically.
+/// let six_fields = CronSchedule::parse("0 0 0 * * *").expect("valid");
+/// let five_fields = CronSchedule::parse("0 0 * * *").expect("valid");
+/// assert_eq!(six_fields, five_fields);
+/// assert_eq!(six_fields.to_string(), five_fields.to_string());
+/// ```
 #[derive(Debug, Clone)]
 pub struct CronSchedule {
     pub(crate) second: FieldSchedule,
@@ -39,7 +73,6 @@ pub struct CronSchedule {
     pub(crate) month: FieldSchedule,
     pub(crate) days: DayFilter,
     pub(crate) has_seconds: bool,
-    normalized: String,
 }
 
 impl PartialEq for CronSchedule {
@@ -109,7 +142,6 @@ impl CronSchedule {
         }
         let expanded = expand_macro(trimmed);
         let fields: Vec<&str> = expanded.split_whitespace().collect();
-        let normalized = fields.join(" ");
 
         let (has_seconds, offset) = match fields.len() {
             5 => (false, 0),
@@ -140,7 +172,6 @@ impl CronSchedule {
                 (weekday_token != "*").then_some(day_of_week),
             ),
             has_seconds,
-            normalized,
         })
     }
 
@@ -269,8 +300,26 @@ impl FromStr for CronSchedule {
 }
 
 impl fmt::Display for CronSchedule {
+    /// Renders the canonical form. This reads only the components `PartialEq`
+    /// compares, which is what makes `a == b` imply equal output: equal values
+    /// hold the same components, so the same characters come out. Reading
+    /// `has_seconds` here, or any other field equality excludes, would break
+    /// that implication.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.normalized)
+        let second = self.second.canonical_token();
+        let (day_of_month, day_of_week) = self.days.canonical_tokens();
+        if second != "0" {
+            write!(f, "{second} ")?;
+        }
+        write!(
+            f,
+            "{} {} {} {} {}",
+            self.minute.canonical_token(),
+            self.hour.canonical_token(),
+            day_of_month,
+            self.month.canonical_token(),
+            day_of_week
+        )
     }
 }
 
@@ -351,6 +400,228 @@ mod tests {
         let rendered = schedule.to_string();
         let reparsed = CronSchedule::parse(&rendered).expect("valid");
         assert_eq!(schedule, reparsed);
+    }
+
+    fn rendered(expression: &str) -> String {
+        CronSchedule::parse(expression).expect("valid").to_string()
+    }
+
+    #[test]
+    fn display_omits_the_seconds_field_when_seconds_are_zero() {
+        assert_eq!(rendered("0 0 * * *"), "0 0 * * *");
+        assert_eq!(rendered("0 0 0 * * *"), "0 0 * * *");
+    }
+
+    #[test]
+    fn display_keeps_the_seconds_field_when_seconds_are_not_zero() {
+        assert_eq!(rendered("30 0 0 * * *"), "30 0 0 * * *");
+        assert_eq!(rendered("* 0 0 * * *"), "* 0 0 * * *");
+        assert_eq!(rendered("0,30 0 0 * * *"), "0,30 0 0 * * *");
+    }
+
+    // The five-versus-six-field rule reads the seconds SET, never `has_seconds`,
+    // which equality excludes. Reading the flag would break the invariant on this
+    // very pair, which differs by nothing else.
+    #[test]
+    fn display_does_not_read_the_seconds_flag() {
+        let five = CronSchedule::parse("0 0 * * *").expect("valid");
+        let six = CronSchedule::parse("0 0 0 * * *").expect("valid");
+        assert_ne!(five.has_seconds, six.has_seconds);
+        assert_eq!(five, six);
+        assert_eq!(five.to_string(), six.to_string());
+    }
+
+    #[test]
+    fn display_renders_names_and_aliases_as_numbers() {
+        assert_eq!(rendered("0 9 * * MON-FRI"), "0 9 * * 1-5");
+        assert_eq!(rendered("0 0 1 JAN *"), "0 0 1 1 *");
+        assert_eq!(rendered("0 0 * * 7"), "0 0 * * 0");
+        assert_eq!(rendered("0 0 * dec *"), "0 0 * 12 *");
+    }
+
+    #[test]
+    fn display_expands_a_macro() {
+        assert_eq!(rendered("@yearly"), "0 0 1 1 *");
+        assert_eq!(rendered("@annually"), "0 0 1 1 *");
+        assert_eq!(rendered("@monthly"), "0 0 1 * *");
+        assert_eq!(rendered("@weekly"), "0 0 * * 0");
+        assert_eq!(rendered("@daily"), "0 0 * * *");
+        assert_eq!(rendered("@midnight"), "0 0 * * *");
+        assert_eq!(rendered("@hourly"), "0 * * * *");
+    }
+
+    #[test]
+    fn display_normalises_whitespace_order_and_duplicates() {
+        assert_eq!(rendered("  0   0 15,1,15 * MON  "), "0 0 1,15 * 1");
+    }
+
+    #[test]
+    fn display_expands_a_step() {
+        assert_eq!(rendered("*/15 * * * *"), "0,15,30,45 * * * *");
+        assert_eq!(rendered("0 0-6/2 * * *"), "0 0,2,4,6 * * *");
+    }
+
+    // #41 folded a day restriction accepting every day into `EveryDay`, so the
+    // canonical form loses a spelling that equality had already declared
+    // insignificant. Contesting this means contesting #41, not the rendering.
+    #[test]
+    fn display_drops_a_day_restriction_that_restricts_nothing() {
+        assert_eq!(rendered("0 0 1-31 * *"), "0 0 * * *");
+        assert_eq!(rendered("0 0 13 * 0-6"), "0 0 * * *");
+        assert_eq!(rendered("0 0 1-31 * MON"), "0 0 * * *");
+    }
+
+    #[test]
+    fn display_keeps_a_day_of_month_that_alone_restricts() {
+        assert_eq!(rendered("0 0 13 * *"), "0 0 13 * *");
+    }
+
+    #[test]
+    fn display_keeps_a_union_of_two_partial_fields() {
+        assert_eq!(rendered("0 0 1 * MON"), "0 0 1 * 1");
+    }
+
+    // Couples already pinned as equal by #41, now required to render identically.
+    const EQUAL_COUPLES: [(&str, &str); 7] = [
+        ("0 0 * * *", "0 0 0 * * *"),
+        ("0 0 * * *", "0 0 1-31 * *"),
+        ("0 0 * * *", "0 0 13 * 0-6"),
+        ("0 0 * * 0", "0 0 * * 7"),
+        ("0 9 * * MON-FRI", "0 9 * * 1-5"),
+        ("0 0 1,15 * *", "0 0 15,1,1 * *"),
+        ("@daily", "0 0 * * *"),
+    ];
+
+    #[test]
+    fn equal_schedules_display_identically() {
+        for (left, right) in EQUAL_COUPLES {
+            let a = CronSchedule::parse(left).expect("valid");
+            let b = CronSchedule::parse(right).expect("valid");
+            assert_eq!(a, b, "`{left}` and `{right}` should be equal");
+            assert_eq!(
+                a.to_string(),
+                b.to_string(),
+                "`{left}` and `{right}` are equal but render differently"
+            );
+        }
+    }
+
+    // Two schedules that compare equal must fire at the same instants. This does
+    // not test `Display`: it tests the equality boundary #41 drew, since
+    // `has_seconds` drives the iteration step of `occurrence.rs` while being
+    // excluded from the comparison.
+    #[test]
+    fn equal_schedules_produce_the_same_occurrences() {
+        let from = datetime!(2026-01-01 00:00:00 UTC);
+        for (left, right) in EQUAL_COUPLES {
+            let a = CronSchedule::parse(left).expect("valid");
+            let b = CronSchedule::parse(right).expect("valid");
+            let first: Vec<OffsetDateTime> = a.upcoming(from).take(12).collect();
+            let second: Vec<OffsetDateTime> = b.upcoming(from).take(12).collect();
+            assert_eq!(first, second, "`{left}` and `{right}` are equal");
+        }
+    }
+
+    // An exhaustive generator over a reduced domain: every non-empty subset of
+    // five hour values, crossed with the four day-filter shapes. Each case is
+    // emitted as a GROUP of redundant spellings of the same schedule, because a
+    // generator of already-canonical expressions would only ever compare a
+    // schedule with itself and assert nothing.
+    fn equivalent_spelling_groups() -> Vec<Vec<String>> {
+        let hours = [0u8, 1, 5, 22, 23];
+        let day_shapes = [("*", "*"), ("13", "*"), ("*", "1"), ("1", "5")];
+        let mut groups = Vec::new();
+        for mask in 1u32..(1u32 << hours.len()) {
+            let selected: Vec<u8> = hours
+                .iter()
+                .copied()
+                .enumerate()
+                .filter(|(index, _)| mask & (1u32 << index) != 0)
+                .map(|(_, hour)| hour)
+                .collect();
+            let list = |values: &[u8]| {
+                values
+                    .iter()
+                    .map(u8::to_string)
+                    .collect::<Vec<_>>()
+                    .join(",")
+            };
+            let ascending = list(&selected);
+            let descending = {
+                let mut reversed = selected.clone();
+                reversed.reverse();
+                list(&reversed)
+            };
+            let duplicated = format!("{ascending},{}", selected[0]);
+            for (day_of_month, day_of_week) in day_shapes {
+                let mut group = vec![
+                    format!("0 {ascending} {day_of_month} * {day_of_week}"),
+                    format!("0 {descending} {day_of_month} * {day_of_week}"),
+                    format!("0 {duplicated} {day_of_month} * {day_of_week}"),
+                    format!("0 0 {ascending} {day_of_month} * {day_of_week}"),
+                    format!("  0   {ascending}  {day_of_month} *  {day_of_week}  "),
+                ];
+                if day_of_week == "5" {
+                    group.push(format!("0 {ascending} {day_of_month} * FRI"));
+                }
+                // A field written as its full range only restates the schedule
+                // when BOTH day fields are bare. Under the Vixie union, writing
+                // `1-31` while the weekday is restricted makes the full member
+                // absorb the other, which CHANGES the schedule rather than
+                // respelling it. That asymmetry is exactly #41's trap, and a
+                // generator that ignored it would assert a false equality.
+                if day_of_month == "*" && day_of_week == "*" {
+                    group.push(format!("0 {ascending} 1-31 * *"));
+                    group.push(format!("0 {ascending} * * 0-6"));
+                    group.push(format!("0 {ascending} 1-31 * 0-6"));
+                }
+                groups.push(group);
+            }
+        }
+        groups
+    }
+
+    #[test]
+    fn every_generated_group_is_equal_and_renders_identically() {
+        let mut compared = 0usize;
+        for group in equivalent_spelling_groups() {
+            let reference_expression = &group[0];
+            let reference = CronSchedule::parse(reference_expression).expect("valid");
+            for expression in group.iter().skip(1) {
+                let schedule = CronSchedule::parse(expression).expect("valid");
+                assert_eq!(
+                    schedule, reference,
+                    "`{expression}` should equal `{reference_expression}`"
+                );
+                assert_eq!(
+                    schedule.to_string(),
+                    reference.to_string(),
+                    "`{expression}` and `{reference_expression}` are equal but render differently"
+                );
+                compared += 1;
+            }
+        }
+        // Guards against a generator that silently stops producing distinct
+        // spellings, which would leave the assertions above vacuously true.
+        assert!(
+            compared > 500,
+            "only {compared} distinct spellings compared"
+        );
+    }
+
+    #[test]
+    fn every_generated_expression_round_trips_and_is_idempotent() {
+        for expression in equivalent_spelling_groups().into_iter().flatten() {
+            let schedule = CronSchedule::parse(&expression).expect("valid");
+            let once = schedule.to_string();
+            let reparsed = CronSchedule::parse(&once).expect("the rendered form parses");
+            assert_eq!(reparsed, schedule, "`{expression}` rendered `{once}`");
+            assert_eq!(
+                reparsed.to_string(),
+                once,
+                "`{expression}` renders `{once}`, which is not a fixed point"
+            );
+        }
     }
 
     #[test]

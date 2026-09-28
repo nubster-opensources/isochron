@@ -49,6 +49,26 @@ mistake), and it may change in a minor release, including after `1.0`,
 announced under `Changed` in `CHANGELOG.md`. Consumers display it; they must
 not parse it.
 
+## Canonical expression output
+
+The string returned by `Display for CronSchedule` is not human-readable output
+and is **not** covered by the lighter rule above. It is a stable data format,
+intended for cache keys, persistence and reproducible diagnostics. It will not
+change except to correct a rendering that is genuinely wrong, and any change
+ships in a major release, announced under `Changed` in `CHANGELOG.md`.
+
+The distinction is deliberate. `describe` produces prose a consumer shows to a
+person, who reads whatever it says today. `Display` produces a value a consumer
+stores: a stored key that changes shape between releases invalidates data in
+place, and nothing in the consumer's code can detect that it happened. The
+weaker promise would therefore be worse than no promise, because it reads as one.
+
+Two consequences, both intentional. Shorter spellings that would otherwise be
+attractive, such as rendering `0,15,30,45` as `*/15`, are closed off from here
+on. And the format loses information that equality has already declared
+insignificant, so `0 0 13 * 0-6` renders `0 0 * * *`; that follows from the
+equality contract, not from the rendering.
+
 ## Deprecation cycle
 
 When an item is to be removed:
