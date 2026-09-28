@@ -82,11 +82,20 @@ impl DayFilter {
     /// rendering round-trip: a filter that imposes nothing renders as the only
     /// spelling that imposes nothing, and a [`DayFilter::Union`] renders two
     /// tokens neither of which is full, so it cannot fold on the way back.
-    // Red only: unused outside tests until `Display` is wired to it. The Green
-    // commit removes this attribute.
-    #[allow(dead_code)]
     pub(crate) fn canonical_tokens(self) -> (String, String) {
-        todo!("canonical_tokens")
+        let star = || "*".to_owned();
+        match self {
+            Self::EveryDay => (star(), star()),
+            Self::DayOfMonth(days) => (days.canonical_token(), star()),
+            Self::DayOfWeek(days) => (star(), days.canonical_token()),
+            Self::Union {
+                day_of_month,
+                day_of_week,
+            } => (
+                day_of_month.canonical_token(),
+                day_of_week.canonical_token(),
+            ),
+        }
     }
 }
 

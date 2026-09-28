@@ -117,11 +117,28 @@ impl FieldSchedule {
     ///
     /// The token is a function of the set, never of the source spelling, so two
     /// sets that are equal render identically.
-    // Red only: unused outside tests until `Display` is wired to it. The Green
-    // commit removes this attribute.
-    #[allow(dead_code)]
     pub(crate) fn canonical_token(self) -> String {
-        todo!("canonical_token")
+        if self.is_full() {
+            return "*".to_owned();
+        }
+        let values = self.values();
+        let mut runs: Vec<String> = Vec::new();
+        let mut index = 0;
+        while index < values.len() {
+            let start = values[index];
+            let mut end = start;
+            while index + 1 < values.len() && values[index + 1] == end + 1 {
+                index += 1;
+                end = values[index];
+            }
+            runs.push(if start == end {
+                start.to_string()
+            } else {
+                format!("{start}-{end}")
+            });
+            index += 1;
+        }
+        runs.join(",")
     }
 }
 

@@ -100,6 +100,22 @@ one key in a `HashSet`, not four. The comparison is structural on the effective
 day filter: it does not decide general equivalence, and two schedules that never
 fire, such as `0 0 30 2 *` and `0 0 31 2 *`, stay distinct.
 
+**Canonical form.** `Display` renders the schedule, not the spelling it came
+from. Fields keep Vixie order, separated by single spaces, and the seconds field
+appears only when the seconds are not zero, so the usual output is a standard
+five-field expression you can paste into a crontab. A field accepting its whole
+range renders `*`; otherwise values render as maximal ascending runs joined by
+commas, a run of one written bare and a longer run as `a-b`. Months and weekdays
+render as numbers, Sunday always `0`. So `  0   9 * * MON-FRI ` renders
+`0 9 * * 1-5`, and `*/15 * * * *` renders `0,15,30,45 * * * *`.
+
+Because this reads exactly what equality compares, equal schedules always render
+identically, and `parse` of the rendered form gives the schedule back. The output
+is a stable data format, meant for cache keys and persistence: it changes only to
+correct a wrong rendering, and only in a major release. That is a stricter
+promise than the one covering `describe()`, whose English may change in a minor
+release. See [`docs/SEMVER_POLICY.md`](./docs/SEMVER_POLICY.md).
+
 ## Documentation
 
 - API reference on [docs.rs](https://docs.rs/isochron).

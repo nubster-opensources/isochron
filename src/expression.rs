@@ -29,8 +29,42 @@ use crate::field::{self, FieldSchedule};
 /// The comparison is structural on that filter, not extensional on the
 /// occurrences: it does not decide whether two expressions fire at the same
 /// instants in general. Two schedules that never fire, such as `0 0 30 2 *`
-/// and `0 0 31 2 *`, remain distinct. Equality also says nothing about
-/// [`Display`](std::fmt::Display), which renders the expression as written.
+/// and `0 0 31 2 *`, remain distinct.
+///
+/// # Display
+///
+/// [`Display`](std::fmt::Display) renders the canonical form, a function of the
+/// schedule and never of how it was written. Fields come in Vixie order,
+/// `second minute hour day-of-month month day-of-week`, separated by single
+/// spaces; the seconds field appears only when the seconds are not reduced to
+/// zero, so the usual output is a standard five-field expression. A field that
+/// accepts its whole range renders `*`; otherwise values render as maximal
+/// ascending runs joined by commas, a run of one value written bare and a run
+/// of two or more as `a-b`. Months and weekdays render as numbers, Sunday
+/// always as `0`.
+///
+/// Because this reads exactly the components equality compares, `a == b`
+/// implies `a.to_string() == b.to_string()` by construction. Round-tripping
+/// holds too: `CronSchedule::parse(s.to_string())` equals `s`, and rendering it
+/// again yields the same string.
+///
+/// The output is a stable format, meant for cache keys and persistence: it will
+/// not change except to correct a genuinely wrong rendering, and any change ships
+/// in a major version. That is a stricter promise than the one covering
+/// [`CronSchedule::describe`], whose English may change in a minor version.
+///
+/// ```
+/// use isochron::CronSchedule;
+///
+/// let written = CronSchedule::parse("  0   9 * * MON-FRI ").expect("valid");
+/// assert_eq!(written.to_string(), "0 9 * * 1-5");
+///
+/// // Spellings that impose the same instants render identically.
+/// let six_fields = CronSchedule::parse("0 0 0 * * *").expect("valid");
+/// let five_fields = CronSchedule::parse("0 0 * * *").expect("valid");
+/// assert_eq!(six_fields, five_fields);
+/// assert_eq!(six_fields.to_string(), five_fields.to_string());
+/// ```
 #[derive(Debug, Clone)]
 pub struct CronSchedule {
     pub(crate) second: FieldSchedule,
@@ -39,7 +73,6 @@ pub struct CronSchedule {
     pub(crate) month: FieldSchedule,
     pub(crate) days: DayFilter,
     pub(crate) has_seconds: bool,
-    normalized: String,
 }
 
 impl PartialEq for CronSchedule {
@@ -109,7 +142,6 @@ impl CronSchedule {
         }
         let expanded = expand_macro(trimmed);
         let fields: Vec<&str> = expanded.split_whitespace().collect();
-        let normalized = fields.join(" ");
 
         let (has_seconds, offset) = match fields.len() {
             5 => (false, 0),
@@ -140,7 +172,6 @@ impl CronSchedule {
                 (weekday_token != "*").then_some(day_of_week),
             ),
             has_seconds,
-            normalized,
         })
     }
 
@@ -269,8 +300,26 @@ impl FromStr for CronSchedule {
 }
 
 impl fmt::Display for CronSchedule {
+    /// Renders the canonical form. This reads only the components `PartialEq`
+    /// compares, which is what makes `a == b` imply equal output: equal values
+    /// hold the same components, so the same characters come out. Reading
+    /// `has_seconds` here, or any other field equality excludes, would break
+    /// that implication.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.normalized)
+        let second = self.second.canonical_token();
+        let (day_of_month, day_of_week) = self.days.canonical_tokens();
+        if second != "0" {
+            write!(f, "{second} ")?;
+        }
+        write!(
+            f,
+            "{} {} {} {} {}",
+            self.minute.canonical_token(),
+            self.hour.canonical_token(),
+            day_of_month,
+            self.month.canonical_token(),
+            day_of_week
+        )
     }
 }
 
