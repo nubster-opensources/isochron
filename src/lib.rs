@@ -14,6 +14,10 @@
 //! assert_eq!(next, datetime!(2026-01-02 00:00:00 UTC));
 //! ```
 
+// Enables the `doc_cfg` attribute on docs.rs, where `--cfg docsrs` is set, so a reader
+// sees which items a feature gates instead of believing them unconditional.
+#![cfg_attr(docsrs, feature(doc_cfg))]
+
 mod day_filter;
 mod describe;
 mod error;
@@ -21,6 +25,8 @@ mod expression;
 pub(crate) mod field;
 mod iter;
 mod occurrence;
+#[cfg(feature = "serde")]
+mod serialization;
 
 pub use error::CronError;
 pub use expression::CronSchedule;
