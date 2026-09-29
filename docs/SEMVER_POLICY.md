@@ -69,6 +69,19 @@ on. And the format loses information that equality has already declared
 insignificant, so `0 0 13 * 0-6` renders `0 0 * * *`; that follows from the
 equality contract, not from the rendering.
 
+The `serde` representation of a schedule **is** this string, not a separate
+format. It therefore carries this promise and no other one: a value written by
+any format, self-describing or not, stays readable across every minor release,
+and only a major release can change its shape. Declaring a second, stricter
+promise for the serialized form was considered and rejected: two promises over
+the same bytes cannot both be kept the day a rendering has to be corrected.
+
+One property of that form is not a compatibility guarantee and should not be
+read as one. Deserializing accepts every spelling `parse` accepts, which is more
+than `Display` produces, so a hand-written value comes back as its canonical
+form rather than unchanged. Code that needs the spelling a person typed must
+keep its own copy.
+
 ## Deprecation cycle
 
 When an item is to be removed:

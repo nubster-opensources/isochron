@@ -65,6 +65,24 @@ use crate::field::{self, FieldSchedule};
 /// assert_eq!(six_fields, five_fields);
 /// assert_eq!(six_fields.to_string(), five_fields.to_string());
 /// ```
+///
+/// # Serde
+///
+/// With the `serde` feature enabled, off by default, a schedule serializes as
+/// that canonical expression and nothing else: a single string, in every format,
+/// self-describing or not. Deserialization goes through
+/// [`parse`](CronSchedule::parse), so an invalid expression yields the parser's
+/// own reason and never a schedule. Serialization delegates to `Display`, so
+/// equal schedules produce identical bytes by construction rather than by test.
+///
+/// The serialized representation is that string, so it carries the same promise:
+/// it changes only to correct a genuinely wrong rendering, and only in a major
+/// version. Persisted values therefore stay readable across minor releases.
+///
+/// The round trip is deliberately asymmetric, because `parse` accepts more
+/// spellings than `Display` produces. A hand-written `0 0 * * MON-FRI` reads
+/// back correctly and then serializes as `0 0 * * 1-5`. Code that needs the
+/// original spelling must keep its own copy.
 #[derive(Debug, Clone)]
 pub struct CronSchedule {
     pub(crate) second: FieldSchedule,

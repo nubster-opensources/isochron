@@ -70,7 +70,15 @@ request. Contribution guidelines live in
 - These status checks must pass before a pull request can merge, under exactly
   these names: `test (ubuntu-latest)`, `test (macos-latest)`,
   `test (windows-latest)`, `msrv`, `deny`, `team / ai-review`,
-  `Documentation` and `SemVer`.
+  `Documentation`, `SemVer` and `Features`.
+- The `test`, `msrv` and `deny` checks all run with every feature enabled, so
+  none of them exercises the crate as a default consumer builds it. `Features`
+  covers that gap: it builds and tests with no default features, then with each
+  optional feature, and fails if an optional dependency has become reachable
+  from the default dependency graph. Its graph step asserts the absence of a
+  package rather than an exit code, because `cargo tree --invert` returns zero
+  whether the package is present or absent and a check built on it would pass
+  in both cases.
 - Formatting and linting have no check of their own. `cargo fmt --all --check`
   and `cargo clippy --workspace --all-targets --all-features -- -D warnings`
   run inside the `test` job, so a formatting slip turns `test` red rather than

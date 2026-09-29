@@ -12,7 +12,9 @@ fn canonical_corpus() -> Vec<&'static str> {
         "0 0 * * *",
         "0 0 13 * *",
         "0 0 * * 1-5",
-        "*/15 * * * *",
+        // The canonical form of `*/15 * * * *`: this crate expands a step into the list it
+        // denotes, so the step notation itself is not a canonical spelling.
+        "0,15,30,45 * * * *",
         "0 9 1,15 * *",
         "30 0 0 1 1 *",
     ]

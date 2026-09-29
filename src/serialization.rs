@@ -18,39 +18,39 @@ use crate::CronSchedule;
 
 #[cfg_attr(docsrs, doc(cfg(feature = "serde")))]
 impl Serialize for CronSchedule {
-    fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error>
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        todo!("emit the canonical expression as a string")
+        serializer.serialize_str(&self.to_string())
     }
 }
 
 /// Reads a canonical cron expression, whatever format carries it.
 struct CanonicalExpression;
 
-impl<'de> Visitor<'de> for CanonicalExpression {
+impl Visitor<'_> for CanonicalExpression {
     type Value = CronSchedule;
 
-    fn expecting(&self, _formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        todo!("name what this visitor expects")
+    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "a cron expression in Vixie cron format")
     }
 
-    fn visit_str<E>(self, _expression: &str) -> Result<Self::Value, E>
+    fn visit_str<E>(self, expression: &str) -> Result<Self::Value, E>
     where
         E: de::Error,
     {
-        todo!("parse the expression and map the failure onto de::Error::custom")
+        CronSchedule::parse(expression).map_err(de::Error::custom)
     }
 }
 
 #[cfg_attr(docsrs, doc(cfg(feature = "serde")))]
 impl<'de> Deserialize<'de> for CronSchedule {
-    fn deserialize<D>(_deserializer: D) -> Result<Self, D::Error>
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
-        todo!("ask the format for a string, never for a self-describing value")
+        deserializer.deserialize_str(CanonicalExpression)
     }
 }
 
@@ -121,7 +121,9 @@ mod tests {
 
     #[test]
     fn deserializing_reports_the_reason_the_parser_gave() {
-        let failure = serde_json::from_str::<CronSchedule>("\"0 99 * * *\"")
+        // Five fields are `minute hour day-of-month month day-of-week`, so the out of range
+        // value has to sit first for the parser to name the minute field.
+        let failure = serde_json::from_str::<CronSchedule>("\"99 0 * * *\"")
             .expect_err("an out of range minute is refused");
         let message = failure.to_string();
 
