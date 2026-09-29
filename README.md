@@ -116,6 +116,23 @@ correct a wrong rendering, and only in a major release. That is a stricter
 promise than the one covering `describe()`, whose English may change in a minor
 release. See [`docs/SEMVER_POLICY.md`](./docs/SEMVER_POLICY.md).
 
+## Optional features
+
+None are enabled by default, and the default dependency graph is exactly `time`
+and `thiserror`.
+
+- `serde` adds `Serialize` and `Deserialize` for `CronSchedule`. A schedule is
+  serialized as its canonical expression, a single string, in every format
+  including binary ones that are not self-describing. Deserialization runs the
+  full parser, so an invalid expression yields its reason rather than a broken
+  schedule, and equal schedules produce identical bytes. The serialized form is
+  the canonical string, so it carries the same stability promise.
+
+```toml
+[dependencies]
+isochron = { version = "0.1", features = ["serde"] }
+```
+
 ## Documentation
 
 - API reference on [docs.rs](https://docs.rs/isochron).
